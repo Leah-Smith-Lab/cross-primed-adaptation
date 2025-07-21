@@ -1,0 +1,598 @@
+---
+title: "Phage JS26 escape"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  html_notebook: default
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+# Set the working directory for the whole document
+knitr::opts_knit$set(root.dir = "~/Data_analysis/")
+```
+## Load packages
+```{r}
+pacman::p_load(tidyverse,ggh4x,readxl,writexl,scales,RColorBrewer,gcplyr)
+```
+
+## Read in escape phage titer data and plot
+```{r}
+JS26_escape_titers <- read_excel ("./input/phage_experiments/JS26_type_I_versus_type_III_escape_titers.xlsx", sheet="2025_06_17_titers") %>%
+  mutate(
+    Strain = factor(Strain, levels = c(
+      "LacA", "PCF524", "PCF525")),
+    Plasmid=factor(Plasmid,levels= c(
+      "pPF976", "pPF4328", "pPF4329")),
+   Plasmid_spacer=factor(Plasmid_spacer, levels=c(
+      "None", "III-A")),
+    Strain_target=factor(Strain_target, levels=c(
+      "None", "I-E", "I-F")),
+    Spacer=factor(Spacer, levels=c(
+      "None", "Weak", "Strong"
+    ))
+  ) %>%
+  pivot_longer(
+    cols = starts_with("Titer"),
+    names_to = "replicate",
+    values_to = "titer_value"
+  )
+
+## Plot escape titers 
+
+escape_titers<-
+  ggplot(JS26_escape_titers, aes(x = Spacer, y = titer_value)) +
+  stat_summary(fun = mean, geom = "col", aes(fill = Plasmid), color = "black") +  # Bar for average
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4, linewidth=0.3) +  # SE bars
+geom_jitter(color = "black", shape = 1, alpha = 0.6, width=0.1)+
+  facet_wrap(~Strain) +  
+scale_y_log10(
+    limits = c(1e0, 1e12),  # Set log scale limits for y-axis
+    breaks = c(1e0, 1e2, 1e4, 1e6, 1e8, 1e10, 1e12)  # Custom breaks
+  ) +
+  labs(title = "JS26 titers on type I and type III targeting strains",
+       y = "Phage titer (PFU/ml)",
+       x = "Type III-A spacer")+
+  theme_light() +
+  theme(
+   axis.text.x = element_text(color = "black", size = 8),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 7),
+    aspect.ratio = 1,
+    legend.position = "tope",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.spacing.x = unit(0, "lines")   # Horizontal spacing between columns
+  )
+print(escape_titers)
+
+ggsave("./output/phage_experiments/figures/Type_I_JS26_escape_titers.pdf",
+     escape_titers, width=3.3)
+```
+
+## Calculate EOP relative to LacA (WT) control and plot
+```{r}
+# Extract the reference titer value for LacA + pPF976
+reference_titer <- JS26_escape_titers %>%
+  filter(Strain == "LacA", Plasmid == "pPF976") %>%
+  pull(Average_titer) %>%
+  first()
+
+# Create new column with normalized values
+JS26_escape_frequency <- JS26_escape_titers %>%
+  mutate(
+    escape_frequency = titer_value / reference_titer
+  )%>%
+   mutate(
+    Strain_target=factor(Strain_target, levels=c(
+      "None", "I-E", "I-F")),
+    Spacer=factor(Spacer, levels=c(
+      "None", "Weak", "Strong"
+    )))
+
+## plot data
+EOP<-
+  ggplot(JS26_escape_frequency, aes(
+  x = factor(Spacer, levels = c("Strong", "Weak", "None")),
+  y = escape_frequency
+)) +
+  stat_summary(fun = mean, geom = "col", aes(fill = Spacer), color = "black") +  # Bar for average
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4, linewidth=0.3) +  # SE bars
+geom_jitter(color = "black", shape = 1, alpha = 0.6, width=0.1)+
+  facet_wrap(~Strain_target, ncol=1, scales="fixed") +
+  scale_y_log10()+
+  coord_flip()+
+  scale_x_discrete(position = "top")+
+  labs(title = "JS26 titers on type I and type III targeting strains",
+       y = "Efficiency of Plating (EOP)",
+       x = "Plasmid spacer")+
+  scale_fill_manual(values = c("#FFAABB", "#DDDDDD")) +
+  theme_light() +
+  theme(
+   axis.text.x = element_text(color = "black", size = 8),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 7),
+    aspect.ratio = 0.45,
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.spacing.x = unit(0, "lines")   # Horizontal spacing between columns
+  )
+print(EOP)
+
+ggsave("output/phage_experiments/figures/JS26_escape_EOPs.pdf",
+     EOP, width=2.2)
+
+
+
+```
+
+## Read in growth curve titer data and reshape
+```{r}
+JS26_escape_titers_growth_curves <- read_excel ("./input/phage_experiments/JS26_type_I_versus_type_III_growth_curves.xlsx", sheet="I-E_I-F_combined_titers") %>%
+  mutate(
+    Strain = factor(Strain, levels = c("LacA", "PCF524", "PCF525")),
+    Plasmid = factor(Plasmid, levels = c("pPF976", "pPF4329")),
+    Plasmid_spacer = factor(Plasmid_spacer, levels = c("None", "III-A")),
+    Lawn = factor(Lawn, levels = c(
+      "LacA_EV", "LacA_III-A", 
+      "PCF524_EV", "PCF524_III-A", 
+      "PCF525_EV", "PCF525_III-A"
+    )),
+    Lawn = fct_recode(Lawn,
+      "Total" = "LacA_EV",
+      "III-A" = "LacA_III-A",
+      "I-E" = "PCF524_EV",
+      "I-E/
+      III-A" = "PCF524_III-A",
+      "I-F" = "PCF525_EV",
+      "I-F/
+      III-A" = "PCF525_III-A"
+    )
+  )%>%
+  pivot_longer(
+    cols = starts_with("Titer"),
+    names_to = "replicate",
+    values_to = "titer_value"
+  )
+
+
+```
+## Plot growth curve titer data
+```{r}
+
+
+JS26_escape_titers_growth_curves_plot <-
+  ggplot(subset(JS26_escape_titers_growth_curves, MOI==1), aes(x = Lawn, y = titer_value)) +
+  stat_summary(fun = mean, geom = "col", aes(fill=Plasmid_spacer), color = "black") +  # Bar for average
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4, linewidth=0.3) +  # SE bars
+geom_jitter(color = "black", shape = 1, alpha = 0.6, width=0.1)+
+  facet_wrap(Plasmid_spacer~Strain~Time, ncol=4, scales="free_x") +  
+scale_y_log10(
+    #limits = c(1e0, 1e12),  # Set log scale limits for y-axis
+    #breaks = c(1e0, 1e2, 1e4, 1e6, 1e8, 1e10, 1e12)  # Custom breaks
+  ) +
+  labs(title = "JS26 titers on type I and type III targeting strains",
+       y = "Phage titer (PFU/ml)",
+       x = "Phage escapes")+
+   scale_fill_manual(values = c("#AA4499", "#44aa99")) +
+  theme_light() +
+  theme(
+   axis.text.x = element_text(color = "black", size = 8),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 7),
+    aspect.ratio = 0.5,
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.spacing.x = unit(0, "lines")   # Horizontal spacing between columns
+  )
+
+print(JS26_escape_titers_growth_curves_plot)
+
+
+ggsave("./output/phage_experiments/figures/Type_I_JS26_escape_titers_GC_MOI1.pdf",
+     JS26_escape_titers_growth_curves_plot, width=3.5)
+```
+## Read in growth curve data (I-E and I-F) and assign conditions for plotting
+```{r}
+
+I_E_growth_curves <- read_excel ("./input/phage_experiments/JS26_type_I_versus_type_III_growth_curves.xlsx", 
+sheet="2025_06_17_growth_curves")%>%
+  pivot_longer(
+    cols = `1`:`145`,       # columns to gather
+    names_to = "Cycle",     # new column for cycles
+    values_to = "OD600"     # new column for values
+  ) %>%
+  mutate(
+    Cycle = as.numeric(Cycle),
+    Time = ((Cycle - 1) * 10) / 60,  # Convert to hours
+    Phage = factor(Phage, levels = c(
+      "JS26", "JS26_E3", "JS26_and_JS26_E3", "None", "Blank"
+    )),
+    MOI=factor(MOI, levels = c(
+      0, 0.1, 1)),
+    Plasmid_spacer = factor(Plasmid_spacer, levels =c(
+      "None", "III-A"
+    ))
+  )
+
+
+I_F_growth_curves <- read_excel ("./input/phage_experiments/JS26_type_I_versus_type_III_growth_curves.xlsx", 
+sheet="2025_06_18_growth_curves")%>%
+  pivot_longer(
+    cols = `1`:`145`,       # columns to gather
+    names_to = "Cycle",     # new column for cycles
+    values_to = "OD600"     # new column for values
+  ) %>%
+  mutate(
+    Cycle = as.numeric(Cycle),
+    Time = ((Cycle - 1) * 10) / 60,  # Convert to hours
+    Phage = factor(Phage, levels = c(
+      "JS26", "JS26_E6", "JS26_and_JS26_E6", "None", "Blank"
+    )),
+    MOI=factor(MOI, levels = c(
+      0, 0.1, 1)),
+    Plasmid_spacer = factor(Plasmid_spacer, levels =c(
+      "None", "III-A"
+    )),
+    Condition = ifelse(MOI == 0, "Control", "Experiment"))
+```
+## Filter data so controls can be overlayed on plots
+```{r}
+
+plot_data_IF <- bind_rows(
+  I_F_growth_curves %>%
+    filter(Strain != "Blank", MOI != 0),
+  
+  I_F_growth_curves %>%
+    filter(Strain != "Blank", MOI == 0) %>%
+    {
+      phages <- I_F_growth_curves %>%
+        filter(MOI != 0, Phage != "None") %>%
+        distinct(Phage) %>%
+        pull(Phage)
+      
+      slice(., rep(1:n(), times = length(phages))) %>%
+        mutate(Phage = rep(phages, each = nrow(.) / length(phages))) %>%
+        mutate(Phage = factor(Phage, levels = levels(I_F_growth_curves$Phage)))
+    }
+) %>%
+  mutate(MOI = factor(MOI, levels = c(0, 0.1, 1)))%>%
+  mutate(Strain_target=factor(Strain_target, levels=c("None", "I-F")))
+
+plot_data_IE <- bind_rows(
+  I_E_growth_curves %>%
+    filter(Strain != "Blank", MOI != 0),
+  
+  I_E_growth_curves %>%
+    filter(Strain != "Blank", MOI == 0) %>%
+    {
+      phages <- I_E_growth_curves %>%
+        filter(MOI != 0, Phage != "None") %>%
+        distinct(Phage) %>%
+        pull(Phage)
+      
+      slice(., rep(1:n(), times = length(phages))) %>%
+        mutate(Phage = rep(phages, each = nrow(.) / length(phages))) %>%
+        mutate(Phage = factor(Phage, levels = levels(I_E_growth_curves$Phage)))
+    }
+) %>%
+  mutate(MOI = factor(MOI, levels = c(0, 0.1, 1)))%>%
+  mutate(Strain_target=factor(Strain_target, levels=c("None", "I-E")))
+```
+#I-F growth curve plots - adjust MOI field to plot MOI== 1 or 0.1
+```{r}
+growth_curve_overlay_IF <-
+  ggplot(plot_data_IF, aes(x = Time, y = OD600)) +
+  
+  # Experimental data ribbons
+  stat_summary(
+    data = filter(plot_data_IF, MOI == 1 & Strain %in% c("LacA", "PCF525")),
+    aes(color = interaction(Strain_target, Plasmid_spacer), 
+        fill = interaction(Strain_target, Plasmid_spacer), 
+        group = interaction(Strain_target, Plasmid_spacer)),
+     fun.data = mean_se, geom = "ribbon", alpha = 0.2, color = NA
+  ) +
+  
+  # Experimental data lines
+  stat_summary(
+    data = filter(plot_data_IF, MOI == 1 & Strain %in% c("LacA", "PCF525")),
+    aes(color = interaction(Strain_target, Plasmid_spacer), 
+        group = interaction(Strain_target, Plasmid_spacer)),
+    fun = mean, geom = "line", linewidth = 0.5
+  ) +
+  
+   # Control ribbon
+  stat_summary(
+    data = filter(plot_data_IF, MOI == 0 & Strain == "PCF525" & Plasmid_spacer=="None"),
+    aes(fill = "black",
+    group = interaction(Strain_target, Plasmid_spacer)),
+    fun.data = mean_se, geom = "ribbon", alpha = 0.2, color = NA
+  ) +
+  
+  # Control line
+  stat_summary(
+    data = filter(plot_data_IF, MOI == 0 & Strain == "PCF525" & Plasmid_spacer=="None"),
+      aes(color = "black",
+    group = interaction(Strain_target, Plasmid_spacer)),
+    fun = mean, geom = "line", linewidth = 0.5
+  ) +
+  
+  ggh4x::facet_wrap2(~ Phage, ncol = 4) + 
+  scale_color_manual(
+values = c("darkgrey", "#AA4499","#DDCC77", "#44aa99", "black"))+
+  scale_fill_manual(
+    values = c("darkgrey", "#AA4499","#DDCC77", "#44aa99", "black"))+
+  theme_light() +
+  xlab("Time (hours)") +
+  ylab("OD600nm") +
+  ggtitle("JS26 infection curves") +
+   scale_y_log10(
+    limits=c(0.1,1.5),
+    breaks=c(0.1,1)
+  )+
+  scale_x_continuous(
+  breaks = c(0, 5, 10, 15, 20, 25),
+  expand = expansion(mult = c(0.05, 0.05))
+  )+
+  theme(
+    axis.text.x = element_text(color = "black", size = 7),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(colour = "black", size = 8),
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    aspect.ratio = 1
+  )
+
+print(growth_curve_overlay_IF)
+
+
+ggsave("./output/phage_experiments/figures/I-F_JS26_escape_curves_overlays_MOI_1.pdf",
+       growth_curve_overlay_IF, width=3.3)
+
+
+```
+##I-E growth curve - adjust MOI field to plot MOI== 1 or 0.1
+```{r}
+growth_curve_overlay_IE <-
+  ggplot(plot_data_IE, aes(x = Time, y = OD600)) +
+  
+  # Experimental data ribbons
+  stat_summary(
+    data = filter(plot_data_IE, MOI == 1 & Strain %in% c("LacA", "PCF524")),
+    aes(color = interaction(Strain_target, Plasmid_spacer), 
+        fill = interaction(Strain_target, Plasmid_spacer), 
+        group = interaction(Strain_target, Plasmid_spacer)),
+     fun.data = mean_se, geom = "ribbon", alpha = 0.2, color = NA
+  ) +
+  
+  # Experimental data lines
+  stat_summary(
+    data = filter(plot_data_IE, MOI == 1 & Strain %in% c("LacA", "PCF524")),
+    aes(color = interaction(Strain_target, Plasmid_spacer), 
+        group = interaction(Strain_target, Plasmid_spacer)),
+    fun = mean, geom = "line", linewidth = 0.5
+  ) +
+  
+  # Control ribbon
+  stat_summary(
+    data = filter(plot_data_IE, MOI == 0 & Strain == "PCF524" & Plasmid_spacer=="None"),
+    aes(fill = "black",
+    group = interaction(Strain_target, Plasmid_spacer)),
+    fun.data = mean_se, geom = "ribbon", alpha = 0.2, color = NA
+  ) +
+  
+  # Control line
+  stat_summary(
+    data = filter(plot_data_IE, MOI == 0 & Strain == "PCF524" & Plasmid_spacer=="None"),
+      aes(color = "black",
+    group = interaction(Strain_target, Plasmid_spacer)),
+    fun = mean, geom = "line", linewidth = 0.5
+  ) +
+  
+  ggh4x::facet_wrap2(~ Phage, ncol = 4) + 
+  scale_color_manual(
+values = c("darkgrey", "#AA4499","#DDCC77", "#44aa99", "black"))+
+  scale_fill_manual(
+    values = c("darkgrey", "#AA4499","#DDCC77", "#44aa99", "black"))+
+  theme_light() +
+  xlab("Time (hours)") +
+  ylab("OD600nm") +
+  ggtitle("JS26 infection curves") +
+  scale_y_log10(
+    limits=c(0.1,1.5),
+    breaks=c(0.1,1)
+  )+
+  scale_x_continuous(
+  breaks = c(0, 5, 10, 15, 20, 25),
+  expand = expansion(mult = c(0.05, 0.05)))+
+  theme(
+    axis.text.x = element_text(color = "black", size = 7),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(colour = "black", size = 8),
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    aspect.ratio = 1
+  )
+
+print(growth_curve_overlay_IE)
+
+ggsave("output/phage_experiments/figures/I-E_JS26_escape_curves_overlays_MOI_1.pdf",
+       growth_curve_overlay_IE, width=3.3)
+```
+## Plot JS26 and escape phage MOIs on LacA
+```{r}
+escape_growth_curve_overlay_LacA_IF <-
+  ggplot(plot_data_IF, aes(x = Time, y = OD600)) +
+  
+  # Experimental data ribbons
+  stat_summary(
+    data = filter(plot_data_IF, MOI !=0 & Strain == "LacA"),
+    aes(color = MOI, fill = MOI, group = MOI),
+    fun.data = mean_se, geom = "ribbon", alpha = 0.2, color = NA
+  ) +
+  
+  # Experimental data lines
+  stat_summary(
+    data = filter(plot_data_IF, MOI !=0 & Strain == "LacA"),
+    aes(color = MOI, group = MOI),
+    fun = mean, geom = "line", linewidth = 0.5
+  ) +
+  
+   # Control ribbon
+  stat_summary(
+    data = filter(plot_data_IF, MOI == 0 & Strain == "LacA"),
+    aes(color = "0", fill = "0", group = interaction(Strain_target, Phage, Plasmid_spacer)),
+    fun.data = mean_se, geom = "ribbon", alpha = 0.2, color = NA
+  ) +
+  
+  # Control line
+  stat_summary(
+    data = filter(plot_data_IF, MOI == 0 & Strain == "LacA"),
+    aes(color = "0", group = interaction(Strain_target, Phage, Plasmid_spacer)),
+    fun = mean, geom = "line", linewidth = 0.5
+  ) +
+  
+  ggh4x::facet_wrap2(Plasmid_spacer~Phage, ncol = 3) + 
+  
+  scale_color_manual(
+    values = c("0" = "black", "1" = "#2166AC", "0.1" = "#92C5DE"),
+    name = "MOI"
+  ) +
+  
+  scale_fill_manual(
+    values = c("0" = "black", "1" = "#2166AC", "0.1" = "#92C5DE"),
+    name = "MOI"
+  ) +
+  
+  theme_light() +
+  xlab("Time (hours)") +
+  ylab("OD600nm") +
+  ggtitle("JS26 infection curves") +
+  scale_x_continuous(
+  breaks = c(0, 5, 10, 15, 20, 25),  # fixed ticks you want
+  expand = expansion(mult = c(0.05, 0.05)))+
+  theme(
+    axis.text.x = element_text(color = "black", size = 7),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(colour = "black", size = 8),
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    aspect.ratio = 1
+  )
+
+print(escape_growth_curve_overlay_LacA_IF)
+
+ggsave("output/phage_experiments/figures/I-F_JS26_escape_curves_overlays_LacA.pdf",
+       escape_growth_curve_overlay_LacA_IF, width=3.3)
+
+## I-E
+escape_growth_curve_overlay_LacA_IE <-
+  ggplot(plot_data_IE, aes(x = Time, y = OD600)) +
+  
+  # Experimental data ribbons
+  stat_summary(
+    data = filter(plot_data_IE, MOI !=0 & Strain == "LacA"),
+    aes(color = MOI, fill = MOI, group = MOI),
+    fun.data = mean_se, geom = "ribbon", alpha = 0.2, color = NA
+  ) +
+  
+  # Experimental data lines
+  stat_summary(
+    data = filter(plot_data_IE, MOI !=0 & Strain == "LacA"),
+    aes(color = MOI, group = MOI),
+    fun = mean, geom = "line", linewidth = 0.5
+  ) +
+  
+   # Control ribbon
+  stat_summary(
+    data = filter(plot_data_IE, MOI == 0 & Strain == "LacA"),
+    aes(color = "0", fill = "0", group = interaction(Strain_target, Phage, Plasmid_spacer)),
+    fun.data = mean_se, geom = "ribbon", alpha = 0.2, color = NA
+  ) +
+  
+  # Control line
+  stat_summary(
+    data = filter(plot_data_IE, MOI == 0 & Strain == "LacA"),
+    aes(color = "0", group = interaction(Strain_target, Phage, Plasmid_spacer)),
+    fun = mean, geom = "line", linewidth = 0.5
+  ) +
+  
+  ggh4x::facet_wrap2(Plasmid_spacer~Phage, ncol = 3) + 
+  
+  scale_color_manual(
+    values = c("0" = "black", "1" = "#2166AC", "0.1" = "#92C5DE"),
+    name = "MOI"
+  ) +
+  
+  scale_fill_manual(
+    values = c("0" = "black", "1" = "#2166AC", "0.1" = "#92C5DE"),
+    name = "MOI"
+  ) +
+  
+  theme_light() +
+  xlab("Time (hours)") +
+  ylab("OD600nm") +
+  ggtitle("JS26 infection curves") +
+  scale_x_continuous(
+  breaks = c(0, 5, 10, 15, 20, 25),  # fixed ticks you want
+  expand = expansion(mult = c(0.05, 0.05)))+
+  theme(
+    axis.text.x = element_text(color = "black", size = 7),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(colour = "black", size = 8),
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    aspect.ratio = 1
+  )
+
+print(escape_growth_curve_overlay_LacA_IE)
+
+ggsave("output/phage_experiments/figures/I-E_JS26_escape_curves_overlays_LacA.pdf",
+       escape_growth_curve_overlay_LacA_IE, width=3.3)
+```
+
+
+

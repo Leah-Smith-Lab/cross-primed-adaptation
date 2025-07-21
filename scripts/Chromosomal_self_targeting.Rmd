@@ -1,0 +1,723 @@
+---
+title: "Chromosomal self-targeting spacers"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  html_notebook: default
+editor_options:
+  chunk_output_type: inline
+---
+```{r setup, include=FALSE}
+# Set the working directory for the whole document
+knitr::opts_knit$set(root.dir = "~/Data_analysis/")
+```
+## Load packages 
+```{r}
+pacman::p_load(tidyverse,readxl,writexl,ggh4x,UpSetR)
+```
+## Generate target vs nontarget strand summaries from bed files - UNIQUE spacers
+```{r}
+
+generate_features_tables<- function(full_path, file.prefix) {
+  gff_files <- read_delim(full_path, delim = "\t", comment = "#",
+                        col_names=c("seqid",
+                                    "source",
+                                    "type",
+                                    "start",
+                                    "end",
+                                    "score",
+                                    "strand",
+                                    "phase",
+                                    "attributes",
+                                    "reads_target",
+                                    "reads_nontarget"),
+                        col_types=cols(seqid = col_character(),
+                                       source = col_character(),
+                                       type = col_character(),
+                                       start = col_double(),
+                                       end = col_double(),
+                                       score = col_character(),
+                                       strand = col_character(),
+                                       phase = col_character(),
+                                       attributes = col_character(),
+                                       reads_target = col_character(),
+                                       reads_nontarget = col_character()))%>%
+    # remove contig/chromosome rows
+    filter(type!="region")%>%
+    # convert attributes to columns
+    separate_rows(attributes,sep=";")%>%
+    separate(attributes,c("attribute","value"),sep="=")%>%
+    mutate(attribute=tolower(attribute))%>%
+    spread(attribute,value,fill="")
+  
+  # split the parent and children features, then remove empty columns
+  features.parent<-gff_files%>%filter(parent=="")%>%
+    select_if(~!(all(.=="")))
+  
+  features.children<-gff_files%>%filter(parent!="")%>%
+    select_if(~!(all(.=="")))
+  
+  features.children<-features.children%>%filter(!parent %in% features.children$id)
+  
+  # tidy children data  ## THIS STEP is causing the discrepancy!!!!
+  features.children<-features.children%>%mutate(id.child=id,
+                                                id=parent)%>%
+    select(-score,-strand)%>%
+    # frameshifted genes have two entries... need just one
+    group_by(id)%>%
+    mutate(start=min(start),
+           end=max(end),
+           phase=0)%>%
+    # select parent, product and columns with .child
+    select(id,product,ends_with(".child"))%>%
+    distinct()
+  
+  # merge children/parent data
+  features.detailed<-left_join(features.parent,features.children)%>%
+    select(seqid,source,type,id,start,end,strand,locus_tag,product,everything())%>%
+    filter(type!="sequence_feature")%>%
+    separate(id,into=c("new_id","new_locus_tag"), sep="-")
+  
+  features.all<- features.detailed%>%
+    select(seqid,type,start,end,strand,new_id,new_locus_tag,name,product,reads_target,reads_nontarget)%>%
+    arrange(seqid,start)
+  
+  # Extract just the numeric part from the file.prefix
+  sample_name <- sub("^(\\d+).*", "sample_\\1", file.prefix)  # Extract only the leading digits
+  
+  # Add the 'sample' column populated by the sample name (e.g., sample_09)
+  features.all <- features.all %>%
+    mutate(sample = sample_name)
+  
+   #Write the processed data to an Excel file
+  write_xlsx(features.all, path = file.path("./output/alignments/feature_bed_files/unique_spacers/lacA/all_features_stranded/", paste0(file.prefix, "_features_all.xlsx")))
+  
+  # Add this processed data frame to the global list
+  if (!exists("combined_lacA_unique_dfs", envir = .GlobalEnv)) {
+    combined_lacA_unique_dfs <<- list()
+  }
+  
+  combined_lacA_unique_dfs[[file.prefix]] <<- features.all
+  
+  # Return the updated global list (optional, if needed in the future)
+  return(combined_lacA_unique_dfs)
+}
+
+
+# execute function over all wt files
+
+bed_files <- list.files(path="./input/alignments/feature_bed_files/unique_spacers/lacA/", 
+                        pattern = "\\.bed$",
+                        full.names = TRUE)
+
+# Loop through each file and execute the function
+for (file in bed_files) {
+  # Extract the base name of the file (remove directory path)
+  file_name <- basename(file)
+  # Execute the function for each file (remove the file extension for prefix)
+  file_prefix <- gsub("\\.bed$", "", file_name)  # Remove .bed extension
+ generate_features_tables(file, file_prefix)
+}
+
+# combine all samples into one df and append sample metadata
+
+  sample_info <- read_xlsx("./input/references/sample_metadata.xlsx")%>%
+    dplyr::rename(sample=Sample,
+           array=Array,
+           pool=Pool,
+           strain=Strain,
+           priming=Priming,
+           adaptation=Adaptation
+    )
+
+combined_df <- bind_rows(combined_lacA_unique_dfs)%>%
+  mutate(
+    reads_target = as.numeric(reads_target),
+    reads_nontarget = as.numeric(reads_nontarget),
+    new_locus_tag = str_remove_all(new_locus_tag, "^NZ_CP025085.1:|^PCF303:")
+  )%>%
+  left_join(sample_info, by="sample")
+
+write_xlsx(path="./output/alignments/feature_bed_files/unique_spacers/lacA/all_samples_combined_unique_df.xlsx", combined_df)
+```
+## Reshape UNIQUE spacer data for plotting - group by sample
+```{r}
+# read in combined data
+combined_df <- read_xlsx(path="./output/alignments/feature_bed_files/unique_spacers/lacA/all_samples_combined_unique_df.xlsx")
+
+unique_spacer_orientation_summary <- combined_df %>%
+  group_by(sample)%>%
+  mutate(
+    targeting_total=sum(reads_target),
+    nontargeting_total=sum(reads_nontarget)
+  )%>%
+  ungroup()%>%
+  select(sample, strain, array, priming, adaptation, targeting_total,nontargeting_total)%>%
+  distinct() %>%
+  pivot_longer(cols = c(targeting_total, nontargeting_total), 
+               names_to=c("orientation"),
+               values_to=c("read_count"))%>%
+  mutate(strain = fct_relevel(strain, 
+                              "WT", "cas10"))
+
+write_xlsx(path="./output/alignments/feature_bed_files/unique_spacers/lacA/unique_spacer_orientation_summary.xlsx",
+           unique_spacer_orientation_summary)
+```
+
+### Plot UNIQUE spacers summary
+```{r}
+unique_spacer_orientation_summary<- read_xlsx(path="./output/alignments/feature_bed_files/unique_spacers/lacA/unique_spacer_orientation_summary.xlsx")%>%
+  mutate(strain = fct_relevel(strain, 
+                              "WT", "cas10"))
+unique_spacer_summary <-ggplot()+
+  geom_bar(data=unique_spacer_orientation_summary, aes(x=priming, y=read_count, fill=orientation),
+           position ="fill", stat="identity", color="black")+
+  ylab("Proportion of spacers") +
+  facet_wrap(strain~array, ncol=4)+
+  scale_fill_manual(name="Orientation", 
+                    values=c("#77AADD", "#FFAABB"))+
+  guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+  geom_text(data = unique_spacer_orientation_summary, 
+            aes(x = priming, y = read_count, label = read_count, group = orientation),
+            position = position_fill(vjust = 0.5), color = "black", size=3) +  # Position labels at the middle of each bar segment
+  theme_light()+
+  theme(axis.text.x = element_text(color = "black", size = 08),
+        axis.text.y = element_text(color = "black", size = 08),
+        axis.title= element_text(size= 08),
+        legend.text=element_text(size=08),
+        legend.title=element_text(size=08),
+        plot.title = element_text(size=12),
+        strip.background =element_rect(fill=NA),
+        strip.text = element_text(colour = "black", size =08),
+        aspect.ratio = 0.5,
+        legend.position = "top",
+        panel.grid.minor=element_blank(),
+        panel.grid.major=element_blank())
+
+print(unique_spacer_summary)
+
+ ggsave("./output/alignments/figures/spacer_orientation/unique_spacer_chromosomal_summary.pdf",
+     unique_spacer_summary, width=3.3)
+```
+
+
+## Reshape UNIQUE spacer data for plotting - CRISPR3/4 collapsed
+```{r}
+unique_spacer_orientation_summary_collapsed <- unique_spacer_orientation_summary %>%
+  group_by(orientation, strain, priming) %>% # Group by relevant columns
+  summarise(read_count = sum(read_count),
+            .groups = 'drop')  # Summarize and drop the group structure
+
+unique_spacer_summary_collapsed <-ggplot()+
+  geom_bar(data=unique_spacer_orientation_summary_collapsed, aes(x=priming, y=read_count, fill=orientation),
+           position ="fill", stat="identity", color="black")+
+  ylab("Proportion of spacers") +
+  facet_wrap(~strain, ncol=4)+
+  scale_fill_manual(name="Orientation", 
+                    values=c("#77AADD", "#FFAABB"))+
+  guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+  geom_text(data = unique_spacer_orientation_summary_collapsed, 
+            aes(x = priming, y = read_count, label = read_count, group = orientation),
+            position = position_fill(vjust = 0.5), color = "black", size=3) +  # Position labels at the middle of each bar segment
+  theme_light()+
+  theme(axis.text.x = element_text(color = "black", size = 08),
+        axis.text.y = element_text(color = "black", size = 08),
+        axis.title= element_text(size= 08),
+        legend.text=element_text(size=08),
+        legend.title=element_text(size=08),
+        plot.title = element_text(size=12),
+        strip.background =element_rect(fill=NA),
+        strip.text = element_text(colour = "black", size =08),
+        aspect.ratio = 0.5,
+        legend.position = "top",
+        panel.grid.minor=element_blank(),
+        panel.grid.major=element_blank())
+
+print(unique_spacer_summary_collapsed)
+ ggsave("./output/alignments/figures/spacer_orientation/unique_spacer_chromosomal_summary_arrays_combined.pdf",
+     unique_spacer_summary_collapsed, width=3.3)
+```
+
+## Generate target vs nontarget strand summaries from bed files - ALL spacers
+```{r}
+generate_features_tables<- function(full_path, file.prefix) {
+  gff_files <- read_delim(full_path, delim = "\t", comment = "#",
+                           col_names=c("seqid",
+                                       "source",
+                                       "type",
+                                       "start",
+                                       "end",
+                                       "score",
+                                       "strand",
+                                       "phase",
+                                       "attributes",
+                                       "reads_target",
+                                       "reads_nontarget"),
+                           col_types=cols(seqid = col_character(),
+                                          source = col_character(),
+                                          type = col_character(),
+                                          start = col_double(),
+                                          end = col_double(),
+                                          score = col_character(),
+                                          strand = col_character(),
+                                          phase = col_character(),
+                                          attributes = col_character(),
+                                          reads_target = col_character(),
+                                          reads_nontarget = col_character()))%>%
+    # remove contig/chromosome rows
+    filter(type!="region")%>%
+    # convert attributes to columns
+    separate_rows(attributes,sep=";")%>%
+    separate(attributes,c("attribute","value"),sep="=")%>%
+    mutate(attribute=tolower(attribute))%>%
+    spread(attribute,value,fill="")
+  
+  # split the parent and children features, then remove empty columns
+  features.parent<-gff_files%>%filter(parent=="")%>%
+    select_if(~!(all(.=="")))
+  
+  features.children<-gff_files%>%filter(parent!="")%>%
+    select_if(~!(all(.=="")))
+  
+  features.children<-features.children%>%filter(!parent %in% features.children$id)
+  
+  # tidy children data  ## THIS STEP is causing the discrepancy!!!!
+  features.children<-features.children%>%mutate(id.child=id,
+                                                id=parent)%>%
+    select(-score,-strand)%>%
+    # frameshifted genes have two entries... need just one
+    group_by(id)%>%
+    mutate(start=min(start),
+           end=max(end),
+           phase=0)%>%
+    # select parent, product and columns with .child
+    select(id,product,ends_with(".child"))%>%
+    distinct()
+  
+  # merge children/parent data
+  features.detailed<-left_join(features.parent,features.children)%>%
+    select(seqid,source,type,id,start,end,strand,locus_tag,product,everything())%>%
+    filter(type!="sequence_feature")%>%
+    separate(id,into=c("new_id","new_locus_tag"), sep="-")
+  
+  features.all<- features.detailed%>%
+    select(seqid,type,start,end,strand,new_id,new_locus_tag,name,product,reads_target,reads_nontarget)%>%
+    arrange(seqid,start)
+  
+  # Extract just the numeric part from the file.prefix
+  sample_name <- sub("^(\\d+).*", "sample_\\1", file.prefix)  # Extract only the leading digits
+  
+  # Add the 'sample' column populated by the sample name (e.g., sample_09)
+  features.all <- features.all %>%
+    mutate(sample = sample_name)
+  
+  # Write the processed data to an Excel file
+  write_xlsx(features.all, path = file.path("./output/alignments/feature_bed_files/all_spacers/lacA/all_features_stranded/", paste0(file.prefix, "_features_all.xlsx")))
+
+  
+  # Add this processed data frame to the global list
+  if (!exists("combined_lacA_dfs", envir = .GlobalEnv)) {
+    combined_lacA_dfs <<- list()
+  }
+  
+  combined_lacA_dfs[[file.prefix]] <<- features.all
+  
+  # Return the updated global list (optional, if needed in the future)
+  return(combined_lacA_dfs)
+}
+
+# execute function over all wt files
+
+bed_files <- list.files(path="./input/alignments/feature_bed_files/all_spacers/lacA/" ,
+                           pattern = "\\.bed$",
+                        full.names = TRUE)
+
+# Loop through each file and execute the function
+for (file in bed_files) {
+  # Extract the base name of the file (remove directory path)
+  file_name <- basename(file)
+  # Execute the function for each file (remove the file extension for prefix)
+  file_prefix <- gsub("\\.bed$", "", file_name)  # Remove .bed extension
+  generate_features_tables(file, file_prefix)
+}
+
+# combine all samples into one df and append sample metadata
+
+sample_info <- read_xlsx("./input/references/sample_metadata.xlsx")%>%
+    dplyr::rename(sample=Sample,
+           array=Array,
+           pool=Pool,
+           strain=Strain,
+           priming=Priming,
+           adaptation=Adaptation
+    )
+
+combined_df <- bind_rows(combined_lacA_dfs)%>%
+  mutate(
+    reads_target = as.numeric(reads_target),
+    reads_nontarget = as.numeric(reads_nontarget),
+    new_locus_tag = str_remove_all(new_locus_tag, "^NZ_CP025085.1:|^PCF303:")
+      )%>%
+  left_join(sample_info, by="sample")
+  
+write_xlsx(path="./output/alignments/feature_bed_files/all_spacers/lacA/all_samples_combined_df.xlsx", combined_df)
+
+
+# reshape data for plotting - group by sample
+
+# read in combined data if not loaded
+combined_df <- read_xlsx(path="./output/alignments/feature_bed_files/all_spacers/lacA/all_samples_combined_df.xlsx")
+
+all_spacer_orientation_summary <- combined_df %>%
+ group_by(sample)%>%
+  mutate(
+    targeting_total=sum(reads_target),
+  nontargeting_total=sum(reads_nontarget)
+  )%>%
+  ungroup()%>%
+  select(sample, strain, array, priming, adaptation, targeting_total,nontargeting_total)%>%
+  distinct() %>%
+  pivot_longer(cols = c(targeting_total, nontargeting_total), 
+               names_to=c("orientation"),
+               values_to=c("read_count"))%>%
+  mutate(strain = fct_relevel(strain, 
+                              "WT", "cas10"))
+
+write_xlsx(all_spacer_orientation_summary, path=
+"./output/alignments/feature_bed_files/all_spacers/lacA/all_spacer_orientation_summary.xlsx")
+```
+
+## reshape ALL spacer data for plotting - group by feature ######
+```{r}
+
+
+all_spacer_feature_summary_collapsed <- combined_df %>%
+  pivot_longer(cols = c(reads_target, reads_nontarget), 
+               names_to=c("orientation"),
+               values_to=c("read_count"))%>%
+  group_by(strain, start,end, new_locus_tag, new_id, name, product, orientation)%>%
+  summarise(read_count = sum(read_count),
+            .groups = 'drop')%>%  # Summarize and drop the group structure
+mutate(strain = fct_relevel(strain, 
+                              "WT", "cas10"))
+
+write_xlsx(all_spacer_feature_summary_collapsed, "./output/alignments/feature_bed_files/all_spacers/lacA/all_spacer_feature_summary_collapsed.xlsx")
+
+
+```
+## Reshape ALL spacer data (features) as hit or miss data for plotting and output to Excel
+```{r}
+
+#read in collapsed_feature_summary
+all_spacer_feature_summary_collapsed <-read_xlsx("./output/alignments/feature_bed_files/all_spacers/lacA/all_spacer_feature_summary_collapsed.xlsx") %>%
+  mutate(
+    new_locus_tag = str_replace_all(new_locus_tag, "^(PCF303:|NZ_CP025085.1:)", "")
+  )
+
+# read in all lacA feature data
+all_lacA_features <- read_xlsx("./input/references/LacA_features.xlsx")%>%
+  mutate(
+    new_locus_tag = str_replace_all(new_locus_tag, "^(PCF303:|NZ_CP025085.1:)", "")
+  )
+
+features_never_captured <- all_spacer_feature_summary_collapsed %>%
+  group_by(new_locus_tag) %>%
+  filter(all(read_count == 0)) %>%
+  select(new_locus_tag, name, product) %>%
+  distinct(new_locus_tag, name, product)
+
+#write to excel
+features_never_captured_excel <- features_never_captured %>%
+  left_join(all_lacA_features, by=c("new_locus_tag", "name", "product"))%>%
+  select(new_locus_tag, name, product, start,end)
+write_xlsx(file.path=("./output/alignments/feature_bed_files/all_spacers/lacA/features_never_captured.xlsx"), features_never_captured_excel)
+
+features_captured <- all_spacer_feature_summary_collapsed %>%
+  group_by(new_locus_tag) %>%
+  filter(any(read_count > 0)) %>%
+  select(new_locus_tag, name, product) %>%
+  distinct(new_locus_tag, name, product)
+
+# Filtering all data for hits and no hits (target orientation)
+features_targeted <- all_spacer_feature_summary_collapsed %>%
+  filter(orientation == "reads_target") %>%
+  group_by(new_locus_tag) %>%
+  filter(any(read_count > 0)) %>%
+  select(new_locus_tag, name, product) %>%
+  distinct(new_locus_tag, name, product)
+
+features_not_targeted <- all_spacer_feature_summary_collapsed %>%
+  filter(orientation == "reads_target") %>%
+  group_by(new_locus_tag) %>%
+  filter(all(read_count < 1)) %>%
+  select(new_locus_tag, name, product) %>%
+  distinct(new_locus_tag, name, product)
+  
+#write to excel
+features_not_targeted_excel <- features_not_targeted %>%
+  left_join(all_lacA_features, by=c("new_locus_tag", "name", "product"))%>%
+  select(new_locus_tag, name, product, start,end)
+write_xlsx(path="./output/alignments/feature_bed_files/all_spacers/lacA/features_not_targeted_in_wt_or_cas10.xlsx", features_not_targeted_excel)
+
+# Filtering by strain (WT and cas10) for hits and no hits
+strain_WT_features_targeted <- all_spacer_feature_summary_collapsed %>% 
+  filter(strain == "WT", orientation == "reads_target") %>%
+  group_by(new_locus_tag) %>%
+  filter(any(read_count > 0)) %>%
+  select(new_locus_tag, name, product) %>%
+  distinct(new_locus_tag, name, product)
+
+strain_cas10_features_targeted <- all_spacer_feature_summary_collapsed %>% 
+  filter(strain == "cas10", orientation == "reads_target") %>%
+  group_by(new_locus_tag) %>%
+  filter(any(read_count > 0)) %>%
+  select(new_locus_tag, name, product) %>%
+  distinct(new_locus_tag, name, product)
+
+strain_WT_features_not_targeted <- all_spacer_feature_summary_collapsed %>% 
+  filter(strain == "WT", orientation == "reads_target") %>%
+  group_by(new_locus_tag) %>%
+  filter(all(read_count == 0)) %>%
+  select(new_locus_tag, name, product) %>%
+  distinct(new_locus_tag, name, product)
+
+strain_cas10_features_not_targeted <- all_spacer_feature_summary_collapsed %>% 
+  filter(strain == "cas10", orientation == "reads_target") %>%
+  group_by(new_locus_tag) %>%
+  filter(all(read_count == 0)) %>%
+  select(new_locus_tag, name, product) %>%
+  distinct(new_locus_tag, name, product)
+
+# Find features targeted in WT 
+
+#features in WT but not cas10
+unique_wt_features <- inner_join(strain_WT_features_targeted, strain_cas10_features_not_targeted, 
+                                        by = c("new_locus_tag", "name", "product"))
+
+#join to all wt_features
+wt_targeted <- left_join(strain_WT_features_targeted, unique_wt_features, 
+                         by = c("new_locus_tag", "name", "product"))
+
+write_xlsx(path="./output/alignments/feature_bed_files/all_spacers/lacA/features_targeted_in_wt.xlsx", strain_WT_features_targeted)
+
+# Find overlap between WT and cas10 "no hits"
+overlap_wt_cas10_not_targeted <- semi_join(strain_WT_features_not_targeted, strain_cas10_features_not_targeted, by = c("new_locus_tag", "name", "product"))
+# Find rows in strain_WT_no_hits that do not exist in overlap
+antijoin_wt_cas10_not_targeted <- anti_join(strain_WT_features_not_targeted, overlap_wt_cas10_not_targeted, by = c("new_locus_tag", "name", "product"))
+#write to excel
+antijoin_wt_cas10_not_targeted_excel <- antijoin_wt_cas10_not_targeted %>%
+  left_join(all_lacA_features, by=c("new_locus_tag", "name", "product"))%>%
+  select(new_locus_tag, name, product, start,end)
+write_xlsx(path="./output/alignments/feature_bed_files/all_spacers/lacA/features_not_targeted_in_wt.xlsx",
+           antijoin_wt_cas10_not_targeted_excel)
+```
+## Upset plots of ALL spacer data (captured versus never captured - includes target and non-target orientation))
+```{r}
+
+targetlist <-list(
+  features_captured = features_captured$new_locus_tag,
+  features_never_captured = features_never_captured$new_locus_tag,
+  all_features=all_lacA_features$new_locus_tag)
+all_features_summary <-
+  upset(fromList(targetlist),
+      sets=c("features_never_captured","features_captured","all_features"),
+      order.by = "freq",
+      keep.order=TRUE,
+      decreasing = T,
+      set_size.show=TRUE,
+      set_size.numbers_size=7,
+      main.bar.color = "#0077BB",
+      sets.bar.color = "#009988",
+      matrix.color = "#EE3377")
+
+print(all_features_summary)
+
+```
+## Upset plots of ALL spacer data (WT and cas10 - features targeted or not)
+```{r}
+
+hits_list <- list(
+  WT = strain_WT_features_targeted$new_locus_tag,  # Extract 'new_locus_tag' column from df1
+  cas10 = strain_cas10_features_targeted$new_locus_tag   # Extract 'new_locus_tag' column from df2
+)
+miss_list <- list(
+  WT = strain_WT_features_not_targeted$new_locus_tag,  # Extract 'new_locus_tag' column from df1
+  cas10 = strain_cas10_features_not_targeted$new_locus_tag   # Extract 'new_locus_tag' column from df2
+)
+combined_list  <- list(
+  WT_hit = strain_WT_features_targeted$new_locus_tag,  # Extract 'new_locus_tag' column from df1
+  cas10_hit = strain_cas10_features_targeted$new_locus_tag,
+  WT_missed = strain_WT_features_not_targeted$new_locus_tag,  # Extract 'new_locus_tag' column from df1
+  cas10_missed = strain_cas10_features_not_targeted$new_locus_tag# Extract 'new_locus_tag' column from df2
+)
+
+wt_vs_cas10_summary <-
+  upset(fromList(combined_list),
+      sets=c("cas10_missed", "WT_missed","cas10_hit", "WT_hit"),
+      order.by = "freq",
+      keep.order=TRUE,
+      decreasing = T,
+      set_size.show=TRUE,
+      set_size.numbers_size=7,
+      main.bar.color = "#0077BB",
+      sets.bar.color = "#009988",
+      matrix.color = "#EE3377")
+ 
+print(wt_vs_cas10_summary)
+
+```
+## Compare self-targeting data to RNA-seq data
+```{r}
+
+# read in features that were targeted or not-targeted (depleted) in the WT
+genes_depleted_in_WT <- read_xlsx(path = "./output/alignments/feature_bed_files/all_spacers/lacA/features_not_targeted_in_wt.xlsx")%>%
+   select(-c("start", "end"))
+ genes_targeted_in_WT <- read_xlsx(path = "./output/alignments/feature_bed_files/all_spacers/lacA/features_targeted_in_wt.xlsx")
+ 
+ # Read in RNA-seq normalized count data (normalized by read depth - .csv available from GEO)
+ RNA_seq_data <- read.csv("./input/RNAseq_analysis/DeSeq2_output/WTvsPigU_size_factor_normalized_counts.csv",
+   header = TRUE
+ ) %>%
+   rename("new_locus_tag"="X") %>%
+   mutate(new_locus_tag = gsub("^gene-", "", new_locus_tag)) %>%
+   mutate(new_locus_tag = gsub("^id-NZ_CP025085.1:", "", new_locus_tag)) %>%
+   select("new_locus_tag", "SerratiaWT1", "SerratiaWT2", "SerratiaWT3")
+ # Summarize expression data using quartiles
+  RNA_seq_data_summary <- RNA_seq_data %>%
+   group_by(new_locus_tag) %>%
+   summarize(across(starts_with("SerratiaWT"), \(x) mean(x, na.rm = TRUE))) %>%
+   mutate(
+     mean_expression = rowMeans(across(starts_with("SerratiaWT")), na.rm = TRUE),  # Calculate row-wise average
+     expression_level = case_when(
+       mean_expression >= quantile(mean_expression, 0.75) ~ "high",       
+       #Top 25%
+       mean_expression <= quantile(mean_expression, 0.25) ~ "low",        
+       #Bottom 25%
+       mean_expression > quantile(mean_expression, 0.25) & mean_expression < quantile(mean_expression, 0.5) ~ "med_low", 
+       #Between 25% and 50%
+       mean_expression >= quantile(mean_expression, 0.5) & mean_expression < quantile(mean_expression, 0.75) ~ "med_high"  
+       #Between 50% and 75%
+     )
+   ) %>%
+   mutate(across(starts_with("SerratiaWT"), \(x) round(x, digits = 2)))%>%
+    left_join(all_lacA_features %>% select(new_locus_tag, start, end), by = "new_locus_tag")%>%
+    mutate(length=abs(start-end))
+  
+  # Combine RNA-seq data summary with the targeting data into one dataframe
+  expression_summary_length <- bind_rows(
+    left_join(genes_depleted_in_WT, RNA_seq_data_summary, by = "new_locus_tag") %>%
+      mutate(expression_level = factor(expression_level, levels = c("low", "med_low", "med_high", "high"))) %>%
+      mutate(condition = "depleted"),  # Add the condition column after summarizing
+    
+    left_join(genes_targeted_in_WT, RNA_seq_data_summary, by = "new_locus_tag") %>%
+      mutate(expression_level = factor(expression_level, levels = c("low", "med_low", "med_high", "high"))) %>%
+      mutate(condition = "targeted") # Add the condition column after summarizing
+  )%>% 
+    ungroup()%>%
+    arrange(desc(mean_expression))
+  
+# print summary of feature numbers versus expression level to check they are all equal
+ RNA_seq_data_summary_check <- RNA_seq_data_summary %>%
+  group_by(expression_level) %>%
+  summarise(count_new_locus_tag = n_distinct(new_locus_tag), .groups = "drop")
+ head(RNA_seq_data_summary_check)
+```
+## Plot histogram of gene lengths (by gene expression level and target versus depleted)
+```{r, warning=FALSE}
+
+length_histogram <-
+    ggplot(expression_summary_length, aes(x = length, fill = factor(condition, levels = c("targeted", "depleted"))))+
+    geom_histogram(
+      binwidth = 100, 
+      alpha = 0.7, 
+      position = "identity") +  # Histogram bars
+    scale_x_continuous(limits=c(0,16000), 
+                       breaks=c(0,5000,10000,15000),
+                       labels = c(0,5,10,15))+
+    guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+    scale_fill_brewer(palette = "Paired") +
+    theme_light() +
+    ggtitle("Length of targeted versus not-targeted features")+
+    labs(
+      x = "Feature length (kb)",
+      y = "Frequency") +
+    theme(axis.text.x = element_text(color = "black", size = 07),
+          axis.text.y = element_text(color = "black", size = 07),
+          axis.title= element_text(size= 08),
+          legend.text=element_text(size=08),
+          legend.title=element_blank(),
+          plot.title = element_text(size=12),
+          strip.background =element_rect(fill=NA),
+          strip.text = element_blank(),
+          aspect.ratio = 0.3,
+          legend.position = "top",
+          panel.grid.minor=element_blank(),
+          panel.grid.major=element_blank())
+  print(length_histogram)
+  
+  ggsave("./output/alignments/figures/spacer_orientation/length_histograms.pdf",
+     length_histogram, width=3.3)
+```
+## Combine both targeting and expression into one df and assign 'condition' column for each
+```{r}
+
+ expression_summary <- bind_rows(
+   
+   left_join(genes_depleted_in_WT, RNA_seq_data_summary, by = "new_locus_tag") %>%
+     mutate(expression_level = factor(expression_level, levels = c("low", "med_low", "med_high", "high"))) %>%
+     group_by(expression_level) %>%
+     summarize(count = n(), .groups = "drop") %>%
+     mutate(condition = "depleted"),  # Add the condition column after summarizing
+   
+   left_join(genes_targeted_in_WT, RNA_seq_data_summary, by = "new_locus_tag") %>%
+     mutate(expression_level = factor(expression_level, levels = c("low", "med_low", "med_high", "high"))) %>%
+     group_by(expression_level) %>%
+     summarize(count = n(), .groups = "drop") %>%
+     mutate(condition = "targeted") # Add the condition column after summarizing
+ )%>% 
+   group_by(condition) %>%
+   mutate(total_count = sum(count),  # Calculate the total count per condition
+          percentage = count / total_count * 100) %>%
+   
+   ungroup()
+ 
+ # Print the combined expression summary
+ print(expression_summary)
+```
+## Create a stacked bar plot of expression levels for target vs nontarget
+```{r}
+
+ stacked_bar_plot <- ggplot(expression_summary, aes(x = "", y = count, fill = expression_level)) +
+   geom_bar(stat = "identity", position = "stack", width = 1, color = "black") +  # Create a single stacked bar
+   scale_fill_brewer(palette = "GnBu") +
+   labs(x = "", y = "Proportion", fill = "Expression bin") +
+   facet_wrap(~condition, scales="free_y")+
+   guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7))+
+   theme_light() +
+    ggtitle("RNA seq expression level (quartiles) or non-targeted and targeted features")+
+   theme(
+     axis.text.x = element_text(color = "black", size = 08),
+     axis.text.y = element_text(color = "black", size = 07),
+     axis.title= element_text(size= 08),
+     legend.text=element_text(size=08),
+     legend.title=element_text(size=08),
+     plot.title = element_text(size=12),
+     strip.background =element_rect(fill=NA),
+     strip.text = element_text(color = "black", size = 08),
+     aspect.ratio = 1,
+     legend.position = "top",
+     panel.grid.minor=element_blank(),
+     panel.grid.major=element_blank())+
+   # Add raw counts 'n' to the stacked segments
+   geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+             position = position_stack(vjust = 0.5),  # Place text labels in the middle of each stack
+             color = "black", size = 3)  # Set label color and size
+ # Print the plot
+ print(stacked_bar_plot)
+ 
+ ggsave("./output/alignments/figures/spacer_orientation/RNA_expression_quartiles_target_versus_non_target.pdf",
+     stacked_bar_plot, width=3.3)
+
+```
+

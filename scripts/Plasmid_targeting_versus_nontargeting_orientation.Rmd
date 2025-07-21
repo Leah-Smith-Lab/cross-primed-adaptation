@@ -1,0 +1,442 @@
+---
+title: "Plasmid spacers targeting versus non-targeting orientation"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  html_notebook: default
+editor_options:
+  chunk_output_type: inline
+---
+```{r setup, include=FALSE}
+# Set the working directory for the whole document
+knitr::opts_knit$set(root.dir = "~/Data_analysis/")
+```
+## Load packages 
+```{r}
+pacman::p_load(tidyverse,readxl,writexl,ggh4x,UpSetR)
+```
+## Samples processing (UNIQUE spacers) - file looping to read in bed files, reformat and output to excel
+```{r}
+generate_plasmid_features_tables <- function(full_path, file.prefix) {
+  gff <- read_delim(full_path, delim = "\t", comment = "#",
+                    col_names = c("seqid",
+                                  "source",
+                                  "type",
+                                  "start",
+                                  "end",
+                                  "score",
+                                  "strand",
+                                  "phase",
+                                  "attributes",
+                                  "reads_target",
+                                  "reads_nontarget"),
+                    col_types = cols(
+                      seqid = col_character(),
+                      source = col_character(),
+                      type = col_character(),
+                      start = col_double(),
+                      end = col_double(),
+                      score = col_character(),
+                      strand = col_character(),
+                      phase = col_character(),
+                      attributes = col_character(),
+                      reads_target = col_character(),
+                      reads_nontarget = col_character())) %>%
+    filter(type != "region") %>%
+    separate_rows(attributes, sep = ";") %>%
+    separate(attributes, c("attribute", "value"), sep = "=") %>%
+    mutate(attribute = tolower(attribute)) %>%
+    spread(attribute, value, fill = "") %>%
+    group_by(start) %>%
+    mutate(start = min(start),
+           end = max(end),
+           phase = 0) %>%
+    distinct() %>%
+    select(seqid, source, type, name, start, end, strand, reads_target, reads_nontarget) %>%
+    arrange(seqid, start) %>%
+    write_xlsx(path = file.path("./output/alignments/feature_bed_files/unique_spacers/priming_plasmid/all_features/",
+                                paste0(file.prefix, "_features_all.xlsx")))
+  
+}
+  
+ bed_files <- list.files(path = "./input/alignments/feature_bed_files/unique_spacers/priming_plasmid/", 
+                        pattern = "\\.bed$", 
+                        full.names = TRUE)
+
+for (file in bed_files) {
+  file_name <- basename(file)
+  file_prefix <- gsub("\\.bed$", "", file_name)
+  generate_plasmid_features_tables(file, file_prefix)
+}
+  
+  # Read in excel files, combine into one df then write a summary files
+  excel_files <- list.files(path="./output/alignments/feature_bed_files/unique_spacers/priming_plasmid/all_features/", 
+                            pattern = ".xlsx", 
+                            full.names = TRUE)
+
+  # Initialize an empty list to store the dfs
+  df_list <- list()
+  
+  # Loop through each Excel file and read it into a DataFrame
+  for (file in excel_files) {
+    # Read the Excel file into a DataFrame (assuming data is on the first sheet)
+    df <- read_excel(file)
+    
+    # Extract the file name (without path)
+    file_name <- basename(file)  
+    
+    # Extract the number from the start of the file name (e.g., "01" from "01_file.xlsx")
+    sample_number <- sub("^([0-9]{2})_.*$", "sample_\\1", file_name)
+    
+    # If sample_number is NA or not as expected, print a warning and skip that file
+    if (is.na(sample_number) || sample_number == "") {
+      warning(paste("Failed to extract sample number for file:", file_name))
+      next  # Skip to the next file in the loop
+    }
+    
+    # Add the 'sample' column to the DataFrame
+    df$sample <- sample_number
+    
+    # Append the modified DataFrame to the list
+    df_list[[length(df_list) + 1]] <- df
+  }
+  
+  # Combine all DataFrames into one using bind_rows (from dplyr)
+  combined_unique_df <- bind_rows(df_list)%>%
+    filter(name!="rop")
+  write_xlsx(path="./output/alignments/feature_bed_files/unique_spacers/priming_plasmid/priming_plasmid_samples_combined_unique.xlsx", combined_unique_df)
+```
+
+## Samples processing (TOTAL spacers) - file looping to read in bed files, reformat and output to excel
+```{r}
+
+generate_plasmid_features_tables <- function(full_path, file.prefix) {
+  gff <- read_delim(full_path, delim = "\t", comment = "#",
+                    col_names = c("seqid",
+                                  "source",
+                                  "type",
+                                  "start",
+                                  "end",
+                                  "score",
+                                  "strand",
+                                  "phase",
+                                  "attributes",
+                                  "reads_target",
+                                  "reads_nontarget"),
+                    col_types = cols(
+                      seqid = col_character(),
+                      source = col_character(),
+                      type = col_character(),
+                      start = col_double(),
+                      end = col_double(),
+                      score = col_character(),
+                      strand = col_character(),
+                      phase = col_character(),
+                      attributes = col_character(),
+                      reads_target = col_character(),
+                      reads_nontarget = col_character())) %>%
+    filter(type != "region") %>%
+    separate_rows(attributes, sep = ";") %>%
+    separate(attributes, c("attribute", "value"), sep = "=") %>%
+    mutate(attribute = tolower(attribute)) %>%
+    spread(attribute, value, fill = "") %>%
+    group_by(start) %>%
+    mutate(start = min(start),
+           end = max(end),
+           phase = 0) %>%
+    distinct() %>%
+    select(seqid, source, type, name, start, end, strand, reads_target, reads_nontarget) %>%
+    arrange(seqid, start) %>%
+    write_xlsx(path = file.path("./output/alignments/feature_bed_files/all_spacers/priming_plasmid/all_features/",
+                                paste0(file.prefix, "_features_all.xlsx")))
+  
+}
+  
+ bed_files <- list.files(path = "./input/alignments/feature_bed_files/all_spacers/priming_plasmid/", 
+                        pattern = "\\.bed$", 
+                        full.names = TRUE)
+
+for (file in bed_files) {
+  file_name <- basename(file)
+  file_prefix <- gsub("\\.bed$", "", file_name)
+  generate_plasmid_features_tables(file, file_prefix)
+}
+  
+  # Read in excel files, combine into one df then write a summary files
+  excel_files <- list.files(path="./output/alignments/feature_bed_files/all_spacers/priming_plasmid/all_features/", 
+                            pattern = ".xlsx", 
+                            full.names = TRUE)
+
+  # Initialize an empty list to store the dfs
+  df_list <- list()
+  
+  # Loop through each Excel file and read it into a DataFrame
+  for (file in excel_files) {
+    # Read the Excel file into a DataFrame (assuming data is on the first sheet)
+    df <- read_excel(file)
+    
+    # Extract the file name (without path)
+    file_name <- basename(file)  
+    
+    # Extract the number from the start of the file name (e.g., "01" from "01_file.xlsx")
+    sample_number <- sub("^([0-9]{2})_.*$", "sample_\\1", file_name)
+    
+    # If sample_number is NA or not as expected, print a warning and skip that file
+    if (is.na(sample_number) || sample_number == "") {
+      warning(paste("Failed to extract sample number for file:", file_name))
+      next  # Skip to the next file in the loop
+    }
+    
+    # Add the 'sample' column to the DataFrame
+    df$sample <- sample_number
+    
+    # Append the modified DataFrame to the list
+    df_list[[length(df_list) + 1]] <- df
+  }
+  
+  # Combine all DataFrames into one using bind_rows (from dplyr)
+  combined_total_df <- bind_rows(df_list)%>%
+    filter(name!="rop")
+  write_xlsx(path="./output/alignments/feature_bed_files/all_spacers/priming_plasmid/priming_plasmid_samples_combined_total.xlsx", combined_total_df)
+```
+## Reshape plasmid targeting data for plotting #####
+```{r}
+#Read in excel files of unique and all spacer data and sample metadata
+  combined_plasmid_unique_df<- read_xlsx(path="./output/alignments/feature_bed_files/unique_spacers/priming_plasmid/priming_plasmid_samples_combined_unique.xlsx")
+  combined_plasmid_all_df<- read_xlsx(path="./output/alignments/feature_bed_files/all_spacers/priming_plasmid/priming_plasmid_samples_combined_total.xlsx")
+  # Read in sample info
+  sample_info <- read_xlsx("./input/references/sample_metadata.xlsx")%>%
+    dplyr::rename(sample=Sample,
+           array=Array,
+           pool=Pool,
+           strain=Strain,
+           priming=Priming,
+           adaptation=Adaptation
+    )
+```
+## reshape data for plotting - group by feature
+
+
+```{r}
+  
+  # Define a function to process the data frame by feature
+  process_df_by_feature <- function(df, sample_info) {
+    df %>%
+      select(-c("source", "start", "end")) %>%
+      left_join(sample_info, by = "sample") %>%
+      mutate(
+        reads_target = as.numeric(reads_target),
+        reads_nontarget = as.numeric(reads_nontarget)
+      ) %>%
+      group_by(sample, name) %>%
+      mutate(
+        targeting_total = sum(reads_target),
+        nontargeting_total = sum(reads_nontarget)
+      ) %>%
+      ungroup() %>%
+      select(sample, name, targeting_total, nontargeting_total) %>%
+      distinct() %>%
+      pivot_longer(
+        cols = c(targeting_total, nontargeting_total), 
+        names_to = "orientation",
+        values_to = "read_count"
+      ) %>%
+      left_join(sample_info, by = "sample") %>%
+      mutate(
+        strain = fct_relevel(strain, "WT", "cas10"),
+        name = fct_relevel(name, "lacI", "RNAI", "RNAII", "Tc resistance", "mCherry")
+      )
+  }
+  
+  # Process the unique and all spacer plasmid dataframes
+  plasmid_unique_spacers_by_feature <- process_df_by_feature(combined_plasmid_unique_df, sample_info)
+  plasmid_all_spacers_by_feature <- process_df_by_feature(combined_plasmid_all_df, sample_info)
+```
+
+## Plot CRISPR3/CRISPR4 targeting vs non-targeting orientation 
+```{r}
+
+unique_spacer_protein_coding_features <-ggplot()+
+    geom_bar(data=subset(plasmid_unique_spacers_by_feature,
+                           name %in% c("lacI", "Tc resistance", "mCherry")),
+             aes(x=priming, y=read_count, fill=orientation),
+             position ="fill", stat="identity", color="black")+
+    ylab("Proportion of spacers") +
+  ggtitle("Orientation of unique spacers in WT and cas10")+
+    facet_wrap(~strain~array~name, scales = "free_x", ncol=6, labeller=label_both)+
+    scale_fill_manual(name="Orientation", values=c("#77AADD", "#FFAABB"))+
+    guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+    geom_text(data=subset(plasmid_unique_spacers_by_feature,
+                          name %in% c("lacI", "Tc resistance", "mCherry")),
+              aes(x = priming, y = read_count, label = read_count, group = orientation),
+              position = position_fill(vjust = 0.5), color = "black", size=3) +
+    theme_light()+
+    theme(axis.text.x = element_text(color = "black", size = 08),
+          axis.text.y = element_text(color = "black", size = 08),
+          axis.title= element_text(size= 08),
+          legend.text=element_text(size=08),
+          legend.title=element_text(size=08),
+          plot.title = element_text(size=12),
+          strip.background =element_rect(fill=NA),
+          strip.text = element_text(colour = "black", size =08),
+          aspect.ratio = 0.5,
+          legend.position = "top",
+          panel.grid.minor=element_blank(),
+          panel.grid.major=element_blank())
+  
+  print(unique_spacer_protein_coding_features)
+  
+   ggsave("./output/alignments/figures/spacer_orientation/unique_spacer_protein_coding_features.pdf",
+     unique_spacer_protein_coding_features, width=7)
+```
+
+## Collapse counts to plot combined CRISPR3 / CRISPR4 targeting summary
+```{r}
+  
+  # Define the function to summarize the data
+  collapse_plasmid_data <- function(df) {
+    df %>%
+      # Summarize the data by `name`, `strain`, `priming`, and `orientation`
+      group_by(name, strain, priming, orientation) %>%
+      
+      # Calculate summarized read counts for each `orientation`
+      summarise(
+        read_count = sum(read_count, na.rm = TRUE),  # Summing read counts for each group
+        .groups = "drop"  # Drop the grouping structure after summarization
+      ) %>%
+      
+      # Calculate the total read count for all orientations (targeting_total + nontargeting_total)
+      group_by(name, strain, priming) %>%
+      mutate(
+        total_sum = sum(read_count, na.rm = TRUE)  # Total read count for the group
+      ) %>%
+      
+      # Calculate proportions and differences from random (0.5)
+      mutate(
+        targeting_proportion = ifelse(orientation == "targeting_total", read_count / total_sum, NA),
+        nontargeting_proportion = ifelse(orientation == "nontargeting_total", read_count / total_sum, NA),
+        targeting_difference_from_random = ifelse(orientation == "targeting_total", targeting_proportion - 0.5, NA),
+        nontargeting_difference_from_random = ifelse(orientation == "nontargeting_total", nontargeting_proportion - 0.5, NA),
+        percent_increase=ifelse(orientation == "nontargeting_total", (read_count - (total_sum * 0.5)) / (total_sum* 0.5) *100, NA),
+        percent_decrease=ifelse(orientation == "targeting_total", ((total_sum * 0.5) - read_count ) / (total_sum* 0.5) *100, NA)
+      ) %>%
+      # Reshape the data to have a single column `difference_from_random`
+      mutate(
+        difference_from_random = coalesce(targeting_difference_from_random, nontargeting_difference_from_random),
+      percent_difference = coalesce(percent_increase, percent_decrease)
+      ) %>%
+      select(name, strain, priming, orientation, read_count, total_sum,difference_from_random, percent_difference) %>%
+  
+      # Ungroup the data to return a clean dataframe
+      ungroup()
+  }
+  
+  # Apply the function to collapse arrays
+  plasmid_unique_spacers_by_feature_collapsed <- collapse_plasmid_data(plasmid_unique_spacers_by_feature)
+  plasmid_all_spacers_by_feature_collapsed <- collapse_plasmid_data(plasmid_all_spacers_by_feature)
+```
+## Plot collapsed CRISPR3/CRISPR4 targeting vs non-targeting orientation 
+```{r}
+
+unique_spacer_protein_coding_features_collapsed <-ggplot()+
+    geom_bar(data=subset(plasmid_unique_spacers_by_feature_collapsed,
+                         name %in% c("lacI", "Tc resistance", "mCherry")),
+             aes(x=priming, y=read_count, fill=orientation),
+             position ="fill", stat="identity", color="black")+
+    ylab("Proportion of spacers") +
+  ggtitle("Orientation of unique spacers in WT and cas10 (CRISPR3/CRISPR4 combined)")+
+    facet_wrap(~strain~name, scales = "free_x")+
+    scale_fill_manual(name="Orientation", values=c("#77AADD", "#FFAABB"))+
+    guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+    geom_text(data=subset(plasmid_unique_spacers_by_feature_collapsed,
+                          name %in% c("lacI", "Tc resistance", "mCherry")),
+              aes(x = priming, y = read_count, label = read_count, group = orientation),
+              position = position_fill(vjust = 0.5), color = "black", size=3) +
+    theme_light()+
+    theme(axis.text.x = element_text(color = "black", size = 08),
+          axis.text.y = element_text(color = "black", size = 08),
+          axis.title= element_text(size= 08),
+          legend.text=element_text(size=08),
+          legend.title=element_text(size=08),
+          plot.title = element_text(size=12),
+          strip.background =element_rect(fill=NA),
+          strip.text = element_text(colour = "black", size =08),
+          aspect.ratio = 0.5,
+          legend.position = "top",
+          panel.grid.minor=element_blank(),
+          panel.grid.major=element_blank())
+  print(unique_spacer_protein_coding_features_collapsed)
+  ggsave("./output/alignments/figures/spacer_orientation/unique_spacer_protein_coding_features_arrays_combined.pdf",
+     unique_spacer_protein_coding_features_collapsed, width=3.3)
+```
+
+
+## Plot reduction in targeting spacers (expected-observed)
+```{r}
+  #WT
+  wt_difference_plot<-ggplot()+
+    geom_bar(data = subset(plasmid_unique_spacers_by_feature_collapsed,
+                           name %in% c("lacI", "Tc resistance", "mCherry") &
+                             orientation == "targeting_total" &
+                             strain=="WT"),
+             aes(x = priming, y = percent_difference, fill = as.factor(priming)),
+             position = "identity", stat = "identity", color = "black") +
+    ylab("Reduction in targeting
+    spacers (percent)") +
+    ggtitle("Reduction in targeting spacers (WT")+
+    facet_wrap(~name,scales = "free_x")+
+    scale_fill_manual(name="Orientation", values=c("#EE8866", "#EEDD88", "#FFAABB" ))+
+    guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+    theme_light()+
+    theme(axis.text.x = element_text(color = "black", size = 08),
+          axis.text.y = element_text(color = "black", size = 08),
+          axis.title= element_text(size= 08),
+          legend.text=element_text(size=08),
+          legend.title=element_text(size=08),
+          plot.title = element_text(size=12),
+          strip.background =element_rect(fill=NA),
+          strip.text = element_text(colour = "black", size =08),
+          aspect.ratio = 0.5,
+          legend.position = "none",
+          panel.grid.minor=element_blank(),
+          panel.grid.major=element_blank())
+print(wt_difference_plot)
+
+ggsave("./output/alignments/figures/spacer_orientation/wt_difference_in_targeting_plot.pdf",
+     wt_difference_plot, width=3.3)
+  
+  #cas10 mutant
+  cas10_difference_plot<-ggplot()+
+    geom_bar(data = subset(plasmid_unique_spacers_by_feature_collapsed,
+                           name %in% c("lacI", "Tc resistance", "mCherry") &
+                             orientation == "targeting_total" &
+                             strain=="cas10"),
+             aes(x = priming, y = percent_difference, fill = as.factor(priming)),
+             position = "identity", stat = "identity", color = "black") +
+    ylab("Reduction in targeting
+    spacers (percent)") +
+    ggtitle("Reduction in targeting spacers (cas10)")+
+    ylim(-1,1)+
+    facet_wrap(~name,scales = "free_x")+
+    scale_fill_manual(name="Orientation", values=c("#EE8866", "#EEDD88", "#FFAABB" ))+
+    guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+    theme_light()+
+    theme(axis.text.x = element_text(color = "black", size = 08),
+          axis.text.y = element_text(color = "black", size = 08),
+          axis.title= element_text(size= 08),
+          legend.text=element_text(size=08),
+          legend.title=element_text(size=08),
+          plot.title = element_text(size=12),
+          strip.background =element_rect(fill=NA),
+          strip.text = element_text(colour = "black", size =08),
+          aspect.ratio = 0.5,
+          legend.position = "none",
+          panel.grid.minor=element_blank(),
+          panel.grid.major=element_blank())
+  print(cas10_difference_plot)
+  
+  ggsave("./output/alignments/figures/spacer_orientation/cas10_difference_in_targeting_plot.pdf",
+     cas10_difference_plot, width=3.3)
+```
+

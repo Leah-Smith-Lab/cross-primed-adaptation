@@ -1,0 +1,628 @@
+---
+title: "New spacer filtering and mapping analysis"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  html_notebook: default
+editor_options:
+  chunk_output_type: inline
+---
+```{r setup, include=FALSE}
+# Set the working directory for the whole document
+knitr::opts_knit$set(root.dir = "~/Data_analysis/")
+```
+## Load packages 
+```{r}
+pacman::p_load(dplyr,tidyr, ggplot2, ggh4x,readxl,writexl,stringr,forcats,scales,RColorBrewer)
+```
+## Read filtering summary plots
+```{r}
+# show number of reads surviving filtering
+
+# read in files
+read_processing_summary <- read_xlsx("./input/fastqc//read_summary_simplified.xlsx")%>%
+  tidyr::pivot_longer(cols = c("Raw reads", "Size filtered reads", "Merged reads", "Extracted spacers", "Mapped spacers", "Uniquely mapped spacers"),
+                      names_to = "Processing_step",
+                      values_to = "Read_count")%>%
+  mutate(Priming = fct_relevel(Priming, 
+                               "control", "I-E", "I-F"),
+         Strain = fct_relevel(Strain, 
+                              "WT", "cas10"),
+         Processing_step = fct_relevel(Processing_step, 
+                                       "Raw reads","Size filtered reads","Merged reads","Extracted spacers","Mapped spacers","Uniquely mapped spacers"))
+
+#paired end reads
+
+read_filtering_summary_plot <-
+  ggplot(
+    subset(read_processing_summary, !(
+      Processing_step %in% c("Uniquely mapped spacers", "Mapped spacers")
+    )),
+    aes(x = Strain, y = Read_count, fill = Processing_step)
+  ) +
+  geom_bar(
+    position = "dodge",
+    width = 0.8,
+    stat = "identity",
+    color = "black"
+  ) +
+  ylab("Mapped spacers") +
+  scale_y_continuous(
+    labels = function(x)
+      sprintf("%.1e", x)
+  ) +
+  facet_grid2( ~ Priming ~ Array, ) +
+  guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+  khroma::scale_fill_vibrant() +
+  ggtitle("Read filtering summary")+
+  theme_light() +
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title = element_text(size = 08),
+    legend.text = element_text(size = 08),
+    legend.title = element_text(size = 08),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 08),
+    aspect.ratio = 0.5,
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank()
+  )
+
+print(read_filtering_summary_plot)
+ggsave("./output/fastqc/figures/read_processing_summary.pdf",
+       read_filtering_summary_plot,
+       width=7)
+
+```
+## Generate spacer alignment summary (by reference) for plotting
+```{r}
+# Read in mapping summary data and filter for plotting
+  # Mapping statistics were extracted from individual BAM files then concatenated in an Excel file
+
+# All spacers
+alignment_summary_all_spacers <- read_xlsx("./input/alignments/mapping_summaries/all_samples_spacer_alignment_summary.xlsx", sheet="all")%>%
+  mutate(Chromosome = str_replace(Chromosome, 'NZ_CP025085.1', 'Genome'),
+         Chromosome = str_replace(Chromosome, 'PCF303', 'Genome'),
+         Adaptation = case_when(
+           Priming == "I-E" ~ "Priming",
+           Priming == "I-F" ~ "Priming",
+           Priming == "control" ~ "Control"
+           ))%>%
+  filter(Chromosome != c('*')) %>%
+  select(-c(Unmapped))%>%
+  select(-c(Length))%>%
+  mutate(Chromosome = fct_relevel(Chromosome, 
+                                  "Genome", "pPF953", "pPF1233", "pPF1236", "pPF3307"),
+         Strain = fct_relevel(Strain, 
+                              "WT", "cas10"))
+# Unique spacers
+alignment_summary_unique_spacers <- read_xlsx("./input/alignments/mapping_summaries/all_samples_spacer_alignment_summary.xlsx", sheet="unique")%>%
+  mutate(Chromosome = str_replace(Chromosome, 'NZ_CP025085.1', 'Genome'),
+         Chromosome = str_replace(Chromosome, 'PCF303', 'Genome'),
+         Adaptation = case_when(
+           Priming == "I-E" ~ "Priming",
+           Priming == "I-F" ~ "Priming",
+           Priming == "control" ~ "Control"
+         ))%>%
+  mutate(Chromosome = fct_relevel(Chromosome, 
+                                  "Genome", "pPF953", "pPF1233", "pPF1236", "pPF3307"),
+         Strain = fct_relevel(Strain, 
+                              "WT", "cas10"))
+
+# Join total and unique data into one df
+alignment_summary_combined <- merge(
+  alignment_summary_unique_spacers, 
+  alignment_summary_all_spacers, 
+  by = c("Sample", "Chromosome", "Array", "Pool", "Strain", "Priming", "Adaptation"),
+  suffixes = c("_unique", "_total")) %>%
+
+# Pivot the Mapped columns from wide to long format
+  pivot_longer(
+    cols = starts_with("Mapped"), 
+    names_to = "Category", 
+    values_to = "Mapped",
+    names_prefix = "Mapped_"
+  )
+```
+## Plot summary of spacer alignment by chromosome (type I-E and I-F spacers)
+```{r}
+typeI_samples_alignment_summary_plot <- 
+  ggplot(subset(alignment_summary_combined, Strain=="WT" & Array %in% c("1", "2")),
+         aes(x=Priming, y=Mapped, fill=Chromosome)) +
+  geom_bar(position ="fill", stat="identity", color="black") +
+  xlab("Plasmid") +
+  ylab("Mapped reads 
+       (Proportion)") +
+  ggtitle("Type I arrays (CRISPR1/2) spacer alignment summary") +
+  facet_wrap(Category~Array, scales = "free_x", ncol = 4, labeller = label_both, drop = TRUE)+  # No need for rows and cols
+  khroma::scale_fill_light()+
+  guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +
+  theme_light()+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title= element_text(size= 08),
+    legend.text=element_text(size=08),
+    legend.title=element_blank(),
+    plot.title = element_text(size=12),
+    strip.background =element_rect(fill=NA),
+    strip.text = element_text(color = "black", size = 08),
+    aspect.ratio = 0.8,
+    legend.position = "top",
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank())
+
+    print(typeI_samples_alignment_summary_plot)
+    ggsave("./output/alignments/figures/mapping_summaries/typeI_samples_alignment_summary_plot.pdf",
+       typeI_samples_alignment_summary_plot,
+       width=3.3)
+```
+## Plot summary of spacer alignment by chromosome (type III spacers)
+```{r}
+typeIII_samples_alignment_summary_plot <- 
+  ggplot(subset(alignment_summary_combined, Array %in% c("3", "4")),
+         aes(x=Priming, y=Mapped, fill=Chromosome)) +
+  geom_bar(position ="fill", stat="identity", color="black") +
+  xlab("Plasmid") +
+  ylab("Mapped reads 
+       (Proportion)") +
+  ggtitle("Type III arrays (CRISPR3/4) spacers alignment summary") +
+  facet_wrap(~Strain~Category~Array, scales = "free_x", ncol = 4, labeller = label_both, drop = TRUE)+  # No need for rows and cols
+  khroma::scale_fill_light()+
+  guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +
+  theme_light()+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title= element_text(size= 08),
+    legend.text=element_text(size=08),
+    legend.title=element_blank(),
+    plot.title = element_text(size=12),
+    strip.background =element_rect(fill=NA),
+    strip.text = element_text(color = "black", size = 08),
+    aspect.ratio = 0.8,
+    legend.position = "top",
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank())
+
+    print(typeIII_samples_alignment_summary_plot)
+    ggsave("./output/alignments/figures/mapping_summaries/typeIII_samples_alignment_summary_plot.pdf",
+       typeIII_samples_alignment_summary_plot,
+       width=3.3)
+```
+## Summarize total and unique spacer counts for the different samples
+```{r}
+# Length distributions (frequency) of extracted spacer (total and unique) were summarized from extracted fastas (in unix) and concatenated to an Excel file where sample metadata was appended
+all_samples_unique_spacer_data_mapped <- read_xlsx("./input/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary.xlsx", sheet="unique_mapped_spacers")
+all_samples_spacer_data_mapped <- read_xlsx("./input/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary.xlsx", sheet="all_mapped_spacers")
+
+#sum spacer count data (unique)
+unique_spacer_counts <- all_samples_unique_spacer_data_mapped %>%
+  group_by(Sample)%>%
+  dplyr::summarize(
+    unique_spacer_count=sum(Count, na.rm=TRUE),
+    Array = dplyr::first(Array),
+    Pool = dplyr::first(Pool),
+    Priming = dplyr::first(Priming),
+    Strain = dplyr::first(Strain))
+
+#sum spacer count data (total)
+all_spacer_counts <- all_samples_spacer_data_mapped %>%
+  group_by(Sample)%>%
+  dplyr::summarize(
+    total_spacer_count=sum(Count, na.rm=TRUE),
+    Array = dplyr::first(Array),
+    Pool = dplyr::first(Pool),
+    Priming = dplyr::first(Priming),
+    Strain = dplyr::first(Strain))
+
+# combine total and unique and write to excel
+spacer_counts_summary <- 
+  left_join(unique_spacer_counts, all_spacer_counts,
+            join_by(Sample, Array, Pool, Priming, Strain))%>%
+  select(Sample, Strain, total_spacer_count, unique_spacer_count, Array, Priming)%>%
+  mutate(Priming = fct_relevel(Priming, 
+                               "control", "I-E", "I-F"),
+         Strain = fct_relevel(Strain, 
+                              "WT", "cas10"))
+```
+## Plot mapped spacer summary counts
+```{r}
+spacer_counts_summary_longer <-  spacer_counts_summary %>%
+tidyr::pivot_longer(cols = c("total_spacer_count", "unique_spacer_count"),
+                    names_to = "category",
+                    values_to = "spacer_count")
+
+mapped_summary_counts_plot <- 
+  ggplot(subset(spacer_counts_summary_longer),
+         aes(x=Strain, y=spacer_count, fill=category, label=spacer_count)) +
+  geom_bar(position ="dodge", width = 0.8, stat="identity", color="black") +
+  geom_text(size = 2, position=position_dodge(width=0.9), vjust=-0.25)+
+  ylab("Mapped spacers") +
+  scale_y_continuous(labels = function(x) sprintf("%.1e", x), 
+                     expand = expansion(mult = c(0.05,0.3))) +
+  facet_grid2(Priming~Array)+
+  scale_fill_manual(values=c("#009988", "#BBBBBB"))+
+  guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +
+  theme_light()+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 07),
+    axis.title= element_text(size= 08),
+    legend.text=element_text(size=08),
+    legend.title=element_blank(),
+    plot.title = element_text(size=08),
+    strip.background =element_rect(fill=NA),
+    strip.text = element_text(color = "black", size = 08),
+    aspect.ratio = 0.5,
+    legend.position = "top",
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank())
+
+print(mapped_summary_counts_plot)
+ggsave("./output/alignments/figures/mapping_summaries/mapped_summary_counts_plot.pdf",
+       mapped_summary_counts_plot,
+       width=7)
+
+```
+## Summarize native CRISPR array spacer length distributions
+```{r}
+# Read in summary data from CRISPRdetect / CRISPRtarget
+
+array_summary_data <- read_xlsx("./input//native_CRISPR_arrays/Native_CRISPR_array_spacer_summary.xlsx")
+
+array_summary_data_reordered <- array_summary_data %>%
+  mutate(Array = fct_relevel(Array, 
+                               "CRISPR1", "CRISPR2", "CRISPR3", "CRISPR4")) %>%
+  mutate(Match = fct_relevel(Match, 
+                               "Viral", "Plasmid", "None"))
+spacer_distributions <- array_summary_data_reordered %>% count(Length, Array, sort=TRUE)%>% 
+  rename(Count=n)
+
+native_array_lengths<-
+  ggplot(data=spacer_distributions, aes(x=Length, y=Count),
+           position ="identity", stat="identity")+
+  geom_col(width=1, fill="light blue",  color="black") +
+  # Very few spacers fall outside this range therefore will be excluded for more compact graphs
+  scale_x_continuous(limits=c(30,35), breaks=c(31, 32, 33,34))+
+  scale_y_continuous(
+    labels = function(x) sprintf("%.1e", x)  # Force scientific notation with one decimal place
+  ) +
+  xlab("Spacer length (nt)") +
+  ylab("Frequency") +
+  ggtitle("Native array spacer distributions") +
+  ggh4x::facet_wrap2(~Array, scales="free_y", labeller=label_both, ncol=4)+
+  theme_light()+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title= element_text(size= 08),
+    legend.text=element_text(size=08),
+    legend.title=element_text(size=08),
+    plot.title = element_text(size=12),
+    strip.background =element_rect(fill=NA),
+    strip.text = element_text(color = "black", size = 08),
+    aspect.ratio = 1,
+    legend.position = "none",
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank())
+print(native_array_lengths)
+
+ggsave("./output/native_CRISPR_arrays/figures/native_array_lengths_plot.pdf",
+       native_array_lengths,
+       width=7)
+```
+
+## Summarize the length distributions of mapped (total and unique) spacers
+```{r}
+# read in data 
+all_samples_unique_spacer_data_mapped <- read_xlsx("./input/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary.xlsx", sheet="unique_mapped_spacers")
+all_samples_spacer_data_mapped <- read_xlsx("./input/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary.xlsx", sheet="all_mapped_spacers")
+
+#Reorder factors for plotting 
+unique_mapped_spacers <- all_samples_unique_spacer_data_mapped%>%
+  mutate(Priming = fct_relevel(Priming, 
+                               "control", "I-E", "I-F"),
+         Strain = fct_relevel(Strain, 
+                              "WT", "cas10"))
+all_mapped_spacers <- all_samples_spacer_data_mapped%>%
+  mutate(Priming = fct_relevel(Priming, 
+                               "control", "I-E", "I-F"),
+         Strain = fct_relevel(Strain, 
+                              "WT", "cas10"))
+```
+## Plot total spacer length distributions - type I-E and I-F (CRISPR1/2) spacers
+```{r, warning=FALSE}
+typeI_all_spacers_summary_plot <- 
+  ggplot(subset(all_mapped_spacers, Strain=="WT" & Array %in% c("1","2")), aes(x=Length, y=Count)) +
+  geom_col(width=1, fill="light blue",  color="black") +
+  # Very few spacers fall outside this range therefore will be excluded for more compact graphs
+  scale_x_continuous(limits=c(30,35), breaks=c(31, 32, 33,34))+
+  scale_y_continuous(
+    labels = function(x) sprintf("%.1e", x)  # Force scientific notation with one decimal place
+  ) +
+  xlab("Spacer length (nt)") +
+  ylab("Frequency") +
+  ggtitle("Type I-E and I-F (CRISPR1/2) total spacer distributions") +
+  ggh4x::facet_wrap2(Priming~Array, scales="free_y", labeller=label_both, ncol=2)+
+  theme_light()+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title= element_text(size= 08),
+    legend.text=element_text(size=08),
+    legend.title=element_text(size=08),
+    plot.title = element_text(size=12),
+    strip.background =element_rect(fill=NA),
+    strip.text = element_text(color = "black", size = 08),
+    aspect.ratio = 1,
+    legend.position = "none",
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank())
+
+print(typeI_all_spacers_summary_plot)
+
+ggsave("./output/spacer_size_distributions/figures/typeI_all_spacers_length_summary_plot.pdf",
+       typeI_all_spacers_summary_plot,
+       width=3.3)
+```
+## Plot unique spacer length distributions - type I-E and I-F (CRISPR1/2) spacers
+```{r, warning=FALSE}
+typeI_unique_spacers_summary_plot <- 
+  ggplot(subset(unique_mapped_spacers, Strain=="WT" & Array %in% c("1","2")), aes(x=Length, y=Count)) +
+  geom_col(width=1, fill="light blue",  color="black") +
+  # Very few spacers fall outside this range therefore will be excluded for more compact graphs
+  scale_x_continuous(limits=c(30,35), breaks=c(31, 32, 33,34))+
+  scale_y_continuous(
+    labels = function(x) sprintf("%.1e", x)  # Force scientific notation with one decimal place
+  ) +
+  xlab("Spacer length (nt)") +
+  ylab("Frequency") +
+  ggtitle("Type I-E and I-F (CRISPR1/2) unique spacer distributions") +
+  ggh4x::facet_wrap2(Priming~Array, scales="free_y", labeller=label_both, ncol=2)+
+  theme_light()+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title= element_text(size= 08),
+    legend.text=element_text(size=08),
+    legend.title=element_text(size=08),
+    plot.title = element_text(size=12),
+    strip.background =element_rect(fill=NA),
+    strip.text = element_text(color = "black", size = 08),
+    aspect.ratio = 0.5,
+    legend.position = "none",
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank())
+
+print(typeI_unique_spacers_summary_plot)
+ggsave("./output/spacer_size_distributions/figures/typeI_unique_spacers_length_summary_plot.pdf",
+       typeI_unique_spacers_summary_plot,
+       width=3.3)
+```
+## Plot total spacer length distributions - type III-A (CRISPR3/4) spacers
+```{r, warning=FALSE}
+typeIII_all_spacers_summary_plot <- 
+  ggplot(subset(all_mapped_spacers, Array %in% c("3","4")), aes(x=Length, y=Count)) +
+  geom_col(width=1, fill="light blue",  color="black") +
+  # Very few spacers fall outside this range therefore will be excluded for more compact graphs
+  scale_x_continuous(limits=c(30,35), breaks=c(31,33,35))+
+  scale_y_continuous(
+    labels = function(x) sprintf("%.1e", x)  # Force scientific notation with one decimal place
+  ) +
+  xlab("Spacer length (nt)") +
+  ylab("Frequency") +
+  ggtitle("Type III-A (CRISPR3/4) total spacer distributions") +
+  ggh4x::facet_wrap2(~Strain~Array~Priming, scales="free_y", labeller=label_both, ncol=6)+
+  theme_light()+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title= element_text(size= 08),
+    legend.text=element_text(size=08),
+    legend.title=element_text(size=08),
+    plot.title = element_text(size=12),
+    strip.background =element_rect(fill=NA),
+    strip.text = element_text(color = "black", size = 08),
+    aspect.ratio = 1,
+    legend.position = "none",
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank())
+
+print(typeIII_all_spacers_summary_plot)
+ggsave("./output/spacer_size_distributions/figures/typeIII_all_spacers_length_summary_plot.pdf",
+       typeIII_all_spacers_summary_plot,
+       width=7)
+
+```
+## Plot unique spacer length distributions - type III-A (CRISPR3/4) spacers
+```{r, warning=FALSE}
+typeIII_unique_spacers_summary_plot <- 
+  ggplot(subset(unique_mapped_spacers, Array %in% c("3","4")), aes(x=Length, y=Count)) +
+  geom_col(width=1, fill="light blue",  color="black") +
+  # Very few spacers fall outside this range therefore will be excluded for more compact graphs
+  scale_x_continuous(limits=c(30,35), breaks=c(31,33,35))+
+  scale_y_continuous(
+    labels = function(x) sprintf("%.1e", x)  # Force scientific notation with one decimal place
+  ) +
+  xlab("Spacer length (nt)") +
+  ylab("Frequency") +
+  ggtitle("Type III (CRISPR3/24) unique spacer distributions") +
+  ggh4x::facet_wrap2(~Strain~Array~Priming, scales="free_y", labeller=label_both, ncol=6)+
+  theme_light()+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title= element_text(size= 08),
+    legend.text=element_text(size=08),
+    legend.title=element_text(size=08),
+    plot.title = element_text(size=12),
+    strip.background =element_rect(fill=NA),
+    strip.text = element_text(color = "black", size = 08),
+    aspect.ratio = 1,
+    legend.position = "none",
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank())
+
+print(typeIII_unique_spacers_summary_plot)
+ggsave("./output/spacer_size_distributions/figures/typeIII_unique_spacers_length_summary_plot.pdf",
+       typeIII_unique_spacers_summary_plot,
+       width=7)
+```
+
+## Read in size distribution of spacer targeting priming (or control) plasmids, append sample info, then reformat 
+```{r}
+# read in sample metadata
+sample_info <- read_xlsx("./input/references/sample_metadata.xlsx")
+all_plasmid_target_spacer_lengths <- read.csv("./input/spacer_size_distributions/mapped_spacer_size_distributions/distributions_all_spacers/by_reference/combined_samples_all_priming_plasmid_spacer_distributions.csv", header=TRUE)%>%
+  left_join(sample_info, by="Sample")
+unique_plasmid_target_spacer_lengths <-read.csv("./input/spacer_size_distributions/mapped_spacer_size_distributions/distributions_unique_spacers/by_reference/combined_samples_unique_priming_plasmid_spacer_distributions.csv", header=TRUE)%>%
+  left_join(sample_info, by="Sample")
+
+# Write data frames to an Excel file with separate sheets
+write_xlsx(list(all_plasmid_spacers = all_plasmid_target_spacer_lengths, unique_plasmid_spacers = unique_plasmid_target_spacer_lengths),
+"./output/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary_by_reference.xlsx")
+
+#read in data (if not loaded) and filter for only type III spacers, and factor for plotting
+type_III_all_plasmid_spacers <- read_xlsx(
+  "./output/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary_by_reference.xlsx",
+  sheet = "all_plasmid_spacers"
+) %>%
+  filter(Array %in% c("3", "4")) %>%
+  mutate(
+    Priming = fct_relevel(Priming, "control", "I-E", "I-F"),
+    Strain = fct_relevel(Strain, "WT", "cas10")
+  )
+
+type_III_unique_plasmid_spacers <- read_xlsx(
+  "./output/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary_by_reference.xlsx",
+  sheet = "unique_plasmid_spacers"
+) %>%
+  filter(Array %in% c("3", "4")) %>%
+  mutate(
+    Priming = fct_relevel(Priming, "control", "I-E", "I-F"),
+    Strain = fct_relevel(Strain, "WT", "cas10")
+  )
+```
+## Plot total plasmid-targeting spacer length distributions - type III-A (CRISPR3/4) spacers
+```{r, warning=FALSE }
+plasmid_targeting_type_III_spacer_distributions <-
+  ggplot(
+    subset(
+      type_III_all_plasmid_spacers,
+      Strain == "WT" & Array %in% c("3", "4"),
+    ),
+    aes(x = Length, y = Count)
+  ) +
+  geom_col(width = 1,
+           fill = "light blue",
+           color = "black") +
+  # Very few spacers fall outside this range therefore will be excluded for more compact graphs
+  scale_x_continuous(limits=c(30,35), breaks=c(31,33,35))+
+  scale_y_continuous(
+    labels = function(x) sprintf("%.1e", x)  # Force scientific notation with one decimal place
+  ) +
+  xlab("Spacer length (nt)") +
+  ylab("Frequency") +
+  ggtitle("Type III plasmid-targeting spacer length distributions") +
+  ggh4x::facet_wrap2(~Array ~ Priming,
+                     scales = "free_y",
+                     labeller = label_both,
+                     ncol = 3) +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title = element_text(size = 08),
+    legend.text = element_text(size = 08),
+    legend.title = element_text(size = 08),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 08),
+    aspect.ratio = 1,
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank()
+  )
+print(plasmid_targeting_type_III_spacer_distributions)
+ggsave("./output/spacer_size_distributions/figures/plasmid_targeting_type_III_spacer_distributions_plot.pdf",
+       plasmid_targeting_type_III_spacer_distributions,
+       width=7)
+
+```
+
+## Create a collapsed summary of type III-A plasmid-targeting spacers for plotting - 34 nt, 33 nt, 32 nt and "other" nts
+```{r}
+# Total spacers
+# Create Length_category and sum counts for 'other' lengths
+type_III_all_plasmid_spacers_summary  <- type_III_all_plasmid_spacers %>%
+  mutate(Length = case_when(
+    Length >= 32 & Length <= 34 ~ as.character(Length),  # Keep lengths 32-35 as they are
+    TRUE ~ "other"  # Collapse all other lengths into 'other'
+  )) %>%
+  # Summing counts for all 'other' lengths while keeping individual lengths for 32-35
+  group_by(Sample, Length, Array, Pool, Strain, Priming) %>%
+  summarise(Count = sum(Count), .groups = "drop")
+
+# Unique spacers
+# Create Length_category and sum counts for 'other' lengths
+type_III_unique_plasmid_spacers_summary  <- type_III_unique_plasmid_spacers %>%
+  mutate(Length = case_when(
+    Length >= 32 & Length <= 34 ~ as.character(Length),  # Keep lengths 32-35 as they are
+    TRUE ~ "other"  # Collapse all other lengths into 'other'
+  )) %>%
+  # Summing counts for all 'other' lengths while keeping individual lengths for 32-35
+  group_by(Sample, Length, Array, Pool, Strain, Priming) %>%
+  summarise(Count = sum(Count), .groups = "drop")
+
+# Join total and unique data and pivot longer for plotting with faceting
+type_III_plasmid_spacers_summary <- left_join(type_III_all_plasmid_spacers_summary, 
+                                              type_III_unique_plasmid_spacers_summary,
+                                              by = c("Sample", "Length", "Strain", "Array", "Pool", "Priming"))%>%
+  rename("Total"="Count.x", "Unique"="Count.y")%>%
+  tidyr::replace_na(list(Total = 0, Unique = 0))%>%
+  tidyr::pivot_longer(cols = c("Total", "Unique"),
+                      names_to = "Category",   # New column that will hold "Total" or "Unique"
+                      values_to = "Count")
+type_III_plasmid_spacers_summary$Length <- factor(type_III_plasmid_spacers_summary$Length, 
+                                                  levels = c("34", "33","32", "other"))
+
+head(type_III_plasmid_spacers_summary)
+```
+
+## Plot collapsed summary of type III-A plasmid-targeting spacers
+```{r}
+typeIII_plasmid_targeting_spacer_lengths<-
+  ggplot(subset(type_III_plasmid_spacers_summary, Array %in% c("3","4")), 
+         aes(x = Priming, y = Count, fill = Length)) +
+  geom_bar(stat = "identity", position = "fill", color="black") +
+  facet_wrap2(Strain~Category~Array, scale="free_x", labeller=label_both, ncol=4) +
+  khroma::scale_fill_pale()+
+  guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7))+
+  ggtitle("Type III plasmid-targeting spacer lengths - collapsed summary") +
+  theme_light()+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title= element_text(size= 08),
+    legend.text=element_text(size=08),
+    legend.title=element_text(size=08),
+    plot.title = element_text(size=12),
+    strip.background =element_rect(fill=NA),
+    strip.text = element_text(color = "black", size = 08),
+    aspect.ratio = 0.8,
+    legend.position = "top",
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank())
+
+print(typeIII_plasmid_targeting_spacer_lengths)
+ggsave("./output/spacer_size_distributions/figures/typeIII_plasmid_targeting_spacer_lengths_collapsed_plot.pdf",
+       typeIII_plasmid_targeting_spacer_lengths,
+       width=7)
+
+```
+

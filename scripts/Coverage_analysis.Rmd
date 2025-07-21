@@ -1,0 +1,463 @@
+---
+title: "Adaptation per-base coverage analysis"
+output:
+  html_notebook: default
+  html_document:
+    df_print: paged
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+# Set the working directory for the whole document
+knitr::opts_knit$set(root.dir = "~/Data_analysis/")
+```
+## load packages
+```{r}
+pacman::p_load(dplyr,tidyr, ggplot2,ggh4x,readxl,writexl,stringr,scales,forcats,RColorBrewer)
+```
+
+## Read-in and format per-base coverage (.csv) files for total spacers - requires ~30 GB of RAM
+```{r}
+
+#Process total spacers
+
+#list path to files and exlude subdirectories
+coverage_files <- list.files(path = "./input//alignments/coverage/total/",
+                             full.names = TRUE,
+                             recursive = FALSE)[file.info(list.files(
+                               path = "./input/alignments/coverage/total/",
+                               full.names = TRUE,
+                               recursive = FALSE
+                             ))$isdir == FALSE]
+
+
+#change files names
+modified_file_names <- gsub("^([0-9]+)_(.*)\\.csv$", "\\2_\\1.csv", basename(coverage_files))
+#print(modified_file_names)
+
+# Loop over the files and assign new names dynamically
+for (i in seq_along(coverage_files)) {
+  file <- coverage_files[i]
+  new_name <- modified_file_names[i]
+  # Remove the file extension for the new variable name
+  df_name <- gsub("\\.csv$", "", new_name)
+  # Read the CSV file with the specified separator
+  assign(df_name, read.csv(file, header = FALSE, sep =""))
+  # Extract the sample number from the new_name (the number at the end of the dataframe name)
+  sample_number <- gsub(".*_(\\d+)\\.csv$", "\\1", new_name)
+  # Add a new column 'sample' and populate it with "sample_" followed by the number of the dataframe
+  df <- get(df_name)
+  df$sample <- paste0("sample_", sample_number)
+  # Rename the columns of the dataframe to be more meaningful
+  colnames(df) <- c("chromosome", "position", "plus_reads", "minus_reads","sample")
+  # Reassign the dataframe with the new column
+  assign(df_name, df)
+}
+```
+
+## Read-in and format per-base coverage (.csv) files for unique spacers
+```{r}
+#Process unique spacers
+
+#list path to files and exlude subdirectories
+
+unique_coverage_files <- list.files(path = "./input/alignments/coverage/unique/",
+                             full.names = TRUE,
+                             recursive = FALSE)[file.info(list.files(
+                               path = "./input/alignments/coverage/unique/",
+                               full.names = TRUE,
+                               recursive = FALSE
+                             ))$isdir == FALSE]
+
+#change files names
+modified_file_names <- gsub("^([0-9]+)_(.*)\\.csv$", "\\2_\\1.csv", basename(unique_coverage_files))
+#print(modified_file_names)
+
+# Loop over the files and assign new names dynamically
+for (i in seq_along(unique_coverage_files)) {
+  file <- unique_coverage_files[i]
+  new_name <- modified_file_names[i]
+  # Remove the file extension for the new variable name
+  df_name <- gsub("\\.csv$", "", new_name)
+  # Read the CSV file with the specified separator
+  assign(df_name, read.csv(file, header = FALSE, sep =""))
+  # Extract the sample number from the new_name (the number at the end of the dataframe name)
+  sample_number <- gsub(".*_(\\d+)\\.csv$", "\\1", new_name)
+  # Add a new column 'sample' and populate it with "sample_" followed by the number of the dataframe
+  df <- get(df_name)
+  df$sample <- paste0("sample_", sample_number)
+  # Rename the columns of the dataframe to be more meaningful
+  colnames(df) <- c("chromosome", "position", "plus_reads", "minus_reads","sample")
+  # Reassign the dataframe with the new column
+  assign(df_name, df)
+}
+```
+
+## Combine per-base coverage for all samples into one df for facet wrapping
+```{r}
+
+# combine all samples (total and unique separately) coverage data into one dataframe, append sample metadata
+
+combined_coverage_data <- rbind(
+  stranded_spacers_coverage_01,
+  stranded_spacers_coverage_02,
+  stranded_spacers_coverage_03,
+  stranded_spacers_coverage_04,
+  stranded_spacers_coverage_05,
+  stranded_spacers_coverage_06,
+  stranded_spacers_coverage_07,
+  stranded_spacers_coverage_08,
+  stranded_spacers_coverage_09,
+  stranded_spacers_coverage_10,
+  stranded_spacers_coverage_11,
+  stranded_spacers_coverage_12,
+  stranded_spacers_coverage_13,
+  stranded_spacers_coverage_14,
+  stranded_spacers_coverage_15,
+  stranded_spacers_coverage_16,
+  stranded_spacers_coverage_17,
+  stranded_spacers_coverage_18,
+  stranded_spacers_coverage_19,
+  stranded_spacers_coverage_20
+)
+
+combined_unique_coverage_data <- rbind(
+  unique_regions_coverage_01,
+  unique_regions_coverage_02,
+  unique_regions_coverage_03,
+  unique_regions_coverage_04,
+  unique_regions_coverage_05,
+  unique_regions_coverage_06,
+  unique_regions_coverage_07,
+  unique_regions_coverage_08,
+  unique_regions_coverage_09,
+  unique_regions_coverage_10,
+  unique_regions_coverage_11,
+  unique_regions_coverage_12,
+  unique_regions_coverage_13,
+  unique_regions_coverage_14,
+  unique_regions_coverage_15,
+  unique_regions_coverage_16,
+  unique_regions_coverage_17,
+  unique_regions_coverage_18,
+  unique_regions_coverage_19,
+  unique_regions_coverage_20
+)
+
+# read in sample info to append to coverage data (e.g. priming, strain etc)
+
+sample_info<-read_xlsx("./input/references/sample_metadata.xlsx")%>%
+  dplyr::rename(c("sample"="Sample", "array"="Array", "pool"="Pool", "strain" = "Strain", "priming"="Priming", "adaptation"="Adaptation"))
+
+# join sample info to the combined coverage data
+
+full_coverage_data <- left_join(combined_coverage_data, sample_info, by="sample")%>%
+  mutate(Adaptation = fct_relevel(adaptation, 
+                                  "primed", "naïve"))
+
+unique_coverage_data <- left_join(combined_unique_coverage_data, sample_info, by="sample")%>%
+ mutate(Adaptation = fct_relevel(adaptation, 
+                                  "primed", "naïve"))
+
+# clear out some large files to reduce memory
+rm(
+  combined_coverage_data,
+  combined_unique_coverage_data,
+  stranded_spacers_coverage_01,
+  stranded_spacers_coverage_02,
+  stranded_spacers_coverage_03,
+  stranded_spacers_coverage_04,
+  stranded_spacers_coverage_05,
+  stranded_spacers_coverage_06,
+  stranded_spacers_coverage_07,
+  stranded_spacers_coverage_08,
+  stranded_spacers_coverage_09,
+  stranded_spacers_coverage_10,
+  stranded_spacers_coverage_11,
+  stranded_spacers_coverage_12,
+  stranded_spacers_coverage_13,
+  stranded_spacers_coverage_14,
+  stranded_spacers_coverage_15,
+  stranded_spacers_coverage_16,
+  stranded_spacers_coverage_17,
+  stranded_spacers_coverage_18,
+  stranded_spacers_coverage_19,
+  stranded_spacers_coverage_20,
+  unique_regions_coverage_01,
+  unique_regions_coverage_02,
+  unique_regions_coverage_03,
+  unique_regions_coverage_04,
+  unique_regions_coverage_05,
+  unique_regions_coverage_06,
+  unique_regions_coverage_07,
+  unique_regions_coverage_08,
+  unique_regions_coverage_09,
+  unique_regions_coverage_10,
+  unique_regions_coverage_11,
+  unique_regions_coverage_12,
+  unique_regions_coverage_13,
+  unique_regions_coverage_14,
+  unique_regions_coverage_15,
+  unique_regions_coverage_16,
+  unique_regions_coverage_17,
+  unique_regions_coverage_18,
+  unique_regions_coverage_19,
+  unique_regions_coverage_20
+)
+gc()
+
+```
+
+## Generate bins [windows] for the combined per-base coverage df in order to produce facet wrapped plots
+```{r}
+## define windows for plotting (2500 nt for host and 25 nt for plasmids) 
+bin_chromosome <- 2500
+bin_plasmid <- 25
+
+# all spacers
+Window25nt_unique <- unique_coverage_data %>% 
+  mutate(window = position %/% bin_plasmid) %>% 
+  group_by(window,chromosome, strain, sample, priming, array) %>%
+  summarise(sum_plus = sum(plus_reads), sum_minus=sum(minus_reads)) %>%
+  mutate(start = (window*bin_plasmid)+1, stop=(window+1)*bin_plasmid)%>%
+  ungroup()
+
+write.csv(Window25nt_unique, "./output/alignments/coverage/unique/windows/all_samples_25nt_window_unique.csv")
+
+Window2500nt_unique <- unique_coverage_data %>% 
+  mutate(window = position %/% bin_chromosome) %>% 
+  group_by(window,chromosome, strain, sample, priming, array) %>%
+  summarise(sum_plus = sum(plus_reads), sum_minus=sum(minus_reads)) %>%
+  mutate(start = (window*bin_chromosome)+1, stop=(window+1)*bin_chromosome)%>%
+  ungroup()
+
+write.csv(Window2500nt_unique, "./output/alignments/coverage/unique/windows/all_samples_2500nt_window_unique.csv")
+
+# all spacers
+
+Window25nt <- full_coverage_data %>% 
+  mutate(window = position %/% bin_plasmid) %>% 
+  group_by(window,chromosome, strain, sample, priming, array) %>%
+  summarise(sum_plus = sum(plus_reads), sum_minus=sum(minus_reads)) %>%
+  mutate(start = (window*bin_plasmid)+1, stop=(window+1)*bin_plasmid)%>%
+  ungroup()
+
+write.csv(Window25nt, "./output/alignments/coverage/total/windows/all_samples_25nt_window.csv")
+
+Window2500nt <- full_coverage_data %>% 
+  mutate(window = position %/% bin_chromosome) %>% 
+  group_by(window,chromosome, strain, sample, priming, array) %>%
+  summarise(sum_plus = sum(plus_reads), sum_minus=sum(minus_reads)) %>%
+  mutate(start = (window*bin_chromosome)+1, stop=(window+1)*bin_chromosome)%>%
+  ungroup()
+
+write.csv(Window2500nt, "./output/alignments/coverage/total/windows/all_samples_2500nt_window.csv")
+
+# clear out some large files to reduce memory
+rm(full_coverage_data,
+   unique_coverage_data)
+gc()
+
+```
+# Read in windowed coverage data for subesquent plots if not already loaded
+```{r}
+Window25nt <- read.csv("./output/alignments/coverage/total/windows/all_samples_25nt_window.csv", header=TRUE)
+Window25nt_unique <- read.csv("./output/alignments/coverage/unique/windows/all_samples_25nt_window_unique.csv", header=TRUE)
+```
+
+## Plot [windowed] coverage data for priming/control plasmid spacers (type III-A CRISPR3/CRISPR4 arrays)
+```{r}
+
+# plot of all spacer coverage, sub out df to plot unique
+plot_facets_plasmids_typeIII<-ggplot()+
+  geom_area(data=subset(Window25nt,
+                          array %in% c("3", "4")&
+                          chromosome %in% c("pPF953", "pPF1233", "pPF1236")),
+            aes(x=start, y=sum_plus,fill=chromosome),
+            position ="identity") +
+  geom_area(data=subset(Window25nt,
+                          array %in% c("3", "4")&
+                          chromosome %in% c("pPF953","pPF1233", "pPF1236")),
+            aes(x=start, y=sum_minus*-1,fill=chromosome),
+            position ="identity") +
+  xlab("Position (kb)")+
+  ylab ("Coverage (+/-)")+ 
+  ggtitle("Priming plasmid spacer mapping (CRISPR3/4)")+
+  scale_x_continuous(breaks=c(0,1000,2000,3000,4000, 5000, 6000), labels=c("0", "1","2","3","4","5","6"))+
+  scale_y_continuous(
+    labels = function(x) sprintf("%.1e", x)  # Force scientific notation with one decimal place
+  ) +
+  facet_grid2(~strain~array~priming, scales="free", independent="all", labeller=label_both)+
+  scale_fill_manual(values=c("#EEDD88","#FFAABB", "#EE8866"))+
+  theme_light() +
+  theme(
+    axis.text.x = element_text(color = "black", size = 8),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 6),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 7),
+    aspect.ratio = 1,
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.spacing.x = unit(0, "lines"),   # Horizontal spacing between columns
+  )
+
+print(plot_facets_plasmids_typeIII) 
+ggsave("./output/alignments/figures/coverage/plasmids/typeIII_spacers_priming_plasmid_coverage.pdf",
+       plot_facets_plasmids_typeIII,
+       width=7)
+
+
+```
+
+## Plot [windowed] coverage data for priming/control plasmid spacers (type I-E and I-F CRISPR1/CRISPR2 arrays)
+```{r}
+
+# plot of all spacer coverage, sub out df to plot unique
+plot_facets_plasmids_typeI<-ggplot()+
+  geom_area(data=subset(Window25nt,
+                          array %in% c("1", "2")&
+                          chromosome %in% c("pPF953", "pPF1233", "pPF1236")),
+            aes(x=start, y=sum_plus,fill=chromosome),
+            position ="identity") +
+  geom_area(data=subset(Window25nt,
+                          array %in% c("1", "2")&
+                          chromosome %in% c("pPF953","pPF1233", "pPF1236")),
+            aes(x=start, y=sum_minus*-1,fill=chromosome),
+            position ="identity") +
+  xlab("Position (kb)")+
+  ylab ("Coverage (+/-)")+ 
+  ggtitle("Priming plasmid spacer mapping (CRISPR1/2)")+
+  scale_x_continuous(breaks=c(0,1000,2000,3000,4000, 5000, 6000), labels=c("0", "1","2","3","4","5","6"))+
+  scale_y_continuous(
+    labels = function(x) sprintf("%.1e", x)  # Force scientific notation with one decimal place
+  ) +
+  facet_grid2(~strain~array~priming, scales="free", independent="all", labeller=label_both)+
+  scale_fill_manual(values=c("#EEDD88","#FFAABB", "#EE8866"))+
+  theme_light() +
+  theme(
+    axis.text.x = element_text(color = "black", size = 8),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 6),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 7),
+    aspect.ratio = 1,
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.spacing.x = unit(0, "lines"),   # Horizontal spacing between columns
+  )
+
+print(plot_facets_plasmids_typeI)
+ggsave("./output/alignments/figures/coverage/plasmids/typeI_spacers_priming_plasmid_coverage.pdf",
+       plot_facets_plasmids_typeI,
+       width=7)
+```
+
+## Plot [windowed] coverage data for chromosomal spacers (type III-A CRISPR3/CRISPR4 arrays)
+```{r}
+
+plot_facets_chromosome_typeIII <-ggplot()+
+  geom_line(data=subset(Window2500nt,
+                          array %in% c("3","4")&
+                          chromosome %in% c("NZ_CP025085.1", "PCCF303")),
+            aes(x=start, y=sum_plus,color=chromosome),
+            position ="identity") +
+  geom_line(data=subset(Window2500nt,
+                          array %in% c("3","4")&
+                          chromosome %in% c("NZ_CP025085.1", "PCCF303")),
+            aes(x=start, y=-sum_minus, color=chromosome),
+            position ="identity") +
+  xlab("Position (mb)")+
+  ylab ("Coverage (+/-)")+ 
+   ggtitle("Chromosomal spacer mapping (CRISPR3/4)")+
+    scale_x_continuous(limits = c(0,5000000),
+    breaks=c(0,1000000,2000000,3000000,4000000, 5000000), 
+    labels=c("0", "1","2","3","4","5"))+
+  scale_y_continuous(
+    labels = function(x) sprintf("%.1e", x),
+    expand = expansion(mult = c(0.1, 0.1)), # Force scientific notation with one decimal place
+  ) +
+  facet_grid2(~strain~array~priming, scales="free", independent="all")+
+  scale_color_manual(values=c("#77AADD"))+
+  theme_light() +
+  theme(
+    axis.text.x = element_text(color = "black", size = 8),
+    axis.text.y = element_text(color = "black", size = 8),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 8),
+    aspect.ratio = 0.3,
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank()
+  )
+
+print(plot_facets_chromosome_typeIII)
+ggsave("./output/alignments/figures/coverage/chromosome/typeIII_spacers_chromosomal_coverage.pdf",
+       plot_facets_chromosome_typeIII,
+       width=7)
+```
+
+## Plot [windowed] coverage data for chromosomal spacers (type I-E/I-F CRISPR1/CRISPR2 arrays)
+```{r}
+# read in windowed data
+
+plot_facets_chromosome_typeI<-ggplot()+
+  geom_line(data=subset(Window2500nt,
+                          array %in% c("1","2")&
+                          chromosome %in% c("NZ_CP025085.1", "PCCF303")),
+            aes(x=start, y=sum_plus,color=chromosome),
+            position ="identity") +
+  geom_line(data=subset(Window2500nt,
+                          array %in% c("1","2")&
+                          chromosome %in% c("NZ_CP025085.1", "PCCF303")),
+            aes(x=start, y=-sum_minus, color=chromosome),
+            position ="identity") +
+  xlab("Position (mb)")+
+  ylab ("Coverage (+/-)")+
+  ggtitle("Chromosomal spacer mapping (CRISPR1/2)")+
+    scale_x_continuous(limits = c(0,5000000),
+    breaks=c(0,1000000,2000000,3000000,4000000, 5000000), 
+    labels=c("0", "1","2","3","4","5"))+
+  scale_y_continuous(
+    labels = function(x) sprintf("%.1e", x),
+    expand = expansion(mult = c(0.1, 0.1)), # Force scientific notation with one decimal place
+  ) +
+  facet_grid2(~strain~array~priming, scales="free", independent="all")+
+  scale_color_manual(values=c("#77AADD"))+
+  theme_light() +
+  theme(
+    axis.text.x = element_text(color = "black", size = 8),
+    axis.text.y = element_text(color = "black", size = 8),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 12),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 8),
+    aspect.ratio = 0.3,
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank()
+  )
+
+print(plot_facets_chromosome_typeI)
+ggsave("./output/alignments/figures/coverage/chromosome/typeI_spacers_chromosomal_coverage.pdf",
+       plot_facets_chromosome_typeI,
+       width=7)
+```
+```
+

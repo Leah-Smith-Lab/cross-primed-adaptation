@@ -1,0 +1,721 @@
+---
+title: "Priming protospacer enrichment analysis"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  html_notebook: default
+editor_options:
+  chunk_output_type: inline
+---
+```{r setup, include=FALSE}
+# Set the working directory for the whole document
+knitr::opts_knit$set(root.dir = "~/Data_analysis/")
+```
+## Load packages 
+```{r}
+pacman::p_load(dplyr,tidyr,ggh4x,readxl,writexl,stringr,forcats,scales, RColorBrewer)
+```
+## Read-in and format per-base coverage (.csv) files, re-name, assign all to a dataframe
+```{r}
+#list path to files
+coverage_files <- list.files(path="./input/alignments/coverage/total////", 
+                    full.names = TRUE)
+#change files names
+modified_file_names <- gsub("^([0-9]+)_(.*)\\.csv$", "\\2_\\1.csv", basename(coverage_files))
+#print(modified_file_names)
+
+# Loop over the files and assign new names dynamically
+for (i in seq_along(coverage_files)) {
+  file <- coverage_files[i]
+  new_name <- modified_file_names[i]
+  # Remove the file extension for the new variable name
+  df_name <- gsub("\\.csv$", "", new_name)
+  # Read the CSV file with the specified separator
+  assign(df_name, read.csv(file, header = FALSE, sep =""))
+  # Extract the sample number from the new_name (the number at the end of the dataframe name)
+  sample_number <- gsub(".*_(\\d+)\\.csv$", "\\1", new_name)
+  # Add a new column 'sample' and populate it with "sample_" followed by the number of the dataframe
+  df <- get(df_name)
+  df$sample <- paste0("sample_", sample_number)
+  # Rename the columns of the dataframe to be more meaningful
+  colnames(df) <- c("chromosome", "position", "plus_reads", "minus_reads","sample")
+  # Reassign the dataframe with the new column
+  assign(df_name, df)}
+```
+## Filter per-base coverage data, adjust so primed and control plasmids are same lengths (so bases align), then join primed and control samples to the same df
+```{r}
+# Wildtype
+# Filter per-coverage plots to only select chromosome we are interested in (priming or control plasmid)
+plasmid_09 <- filter(stranded_spacers_coverage_09, chromosome=="pPF953")%>%
+# Mutate control plasmid coverage by adding 37 nt starting at base 2999 (this is where the protospacer is inserted)
+  mutate(position = if_else(position >= 3001, position +37, position))
+plasmid_10 <- filter(stranded_spacers_coverage_10, chromosome=="pPF1233")
+plasmid_11<- filter(stranded_spacers_coverage_11, chromosome=="pPF1236")
+# Filter per-coverage plots to only select chromosome we are interested in (priming or control plasmid)
+plasmid_15 <- filter(stranded_spacers_coverage_15, chromosome=="pPF953")%>%
+# Mutate control plasmid coverage by adding 37 nt starting at base 2999 (this is where the protospacer is inserted)
+  mutate(position = if_else(position >= 3001, position +37, position))
+plasmid_16 <- filter(stranded_spacers_coverage_16, chromosome=="pPF1233")
+plasmid_17<- filter(stranded_spacers_coverage_17, chromosome=="pPF1236")
+
+#cas10 mutant
+# Filter per-coverage plots to only select chromosome we are interested in (priming or control plasmid)
+plasmid_12 <- filter(stranded_spacers_coverage_12, chromosome=="pPF953")%>%
+  # Mutate control plasmid coverage by adding 37 nt starting at base 2999 (this is where the protospacer is inserted)
+  mutate(position = if_else(position >= 3001, position +37, position))
+plasmid_13 <- filter(stranded_spacers_coverage_13, chromosome=="pPF1233")
+plasmid_14<- filter(stranded_spacers_coverage_14, chromosome=="pPF1236")
+# Filter per-coverage plots to only select chromosome we are interested in (priming or control plasmid)
+plasmid_18 <- filter(stranded_spacers_coverage_18, chromosome=="pPF953")%>%
+  # Mutate control plasmid coverage by adding 37 nt starting at base 2999 (this is where the protospacer is inserted)
+  mutate(position = if_else(position >= 3001, position +37, position))
+plasmid_19 <- filter(stranded_spacers_coverage_19, chromosome=="pPF1233")
+plasmid_20<- filter(stranded_spacers_coverage_20, chromosome=="pPF1236")
+
+# Join control data to the primed data then rename joined columns to be more informative
+join_priming_and_control_I_E_C3_wt <- left_join(plasmid_10, plasmid_09, by="position") %>%
+  rename_with(~ gsub("\\.x$", "_priming", .), ends_with(".x")) %>%
+  rename_with(~ gsub("\\.y$", "_control", .), ends_with(".y"))
+
+join_priming_and_control_I_F_C3_wt <- left_join(plasmid_11, plasmid_09, by="position") %>%
+rename_with(~ gsub("\\.x$", "_priming", .), ends_with(".x")) %>%
+  rename_with(~ gsub("\\.y$", "_control", .), ends_with(".y"))
+
+join_priming_and_control_I_E_C4_wt <- left_join(plasmid_16,plasmid_15, by="position") %>%
+rename_with(~ gsub("\\.x$", "_priming", .), ends_with(".x")) %>%
+  rename_with(~ gsub("\\.y$", "_control", .), ends_with(".y"))
+
+join_priming_and_control_I_F_C4_wt <- left_join(plasmid_17,plasmid_15, by="position") %>%
+rename_with(~ gsub("\\.x$", "_priming", .), ends_with(".x")) %>%
+  rename_with(~ gsub("\\.y$", "_control", .), ends_with(".y"))
+
+join_priming_and_control_I_E_C3_cas10 <- left_join(plasmid_13, plasmid_12, by="position") %>%
+  rename_with(~ gsub("\\.x$", "_priming", .), ends_with(".x")) %>%
+  rename_with(~ gsub("\\.y$", "_control", .), ends_with(".y"))
+
+join_priming_and_control_I_F_C3_cas10 <- left_join(plasmid_14, plasmid_12, by="position") %>%
+  rename_with(~ gsub("\\.x$", "_priming", .), ends_with(".x")) %>%
+  rename_with(~ gsub("\\.y$", "_control", .), ends_with(".y"))
+
+join_priming_and_control_I_E_C4_cas10 <- left_join(plasmid_19,plasmid_18, by="position") %>%
+  rename_with(~ gsub("\\.x$", "_priming", .), ends_with(".x")) %>%
+  rename_with(~ gsub("\\.y$", "_control", .), ends_with(".y"))
+
+join_priming_and_control_I_F_C4_cas10 <- left_join(plasmid_20,plasmid_18, by="position") %>%
+  rename_with(~ gsub("\\.x$", "_priming", .), ends_with(".x")) %>%
+  rename_with(~ gsub("\\.y$", "_control", .), ends_with(".y"))
+```
+## Calculate enrichment ratio (priming/control at each nucleotide position) to see which locations are enriched during priming
+```{r}
+#create a list of dfs we want to process
+joined_dfs <- list(
+  join_priming_and_control_I_E_C3_wt = join_priming_and_control_I_E_C3_wt,
+  join_priming_and_control_I_E_C4_wt = join_priming_and_control_I_E_C4_wt,
+  join_priming_and_control_I_F_C3_wt = join_priming_and_control_I_F_C3_wt,
+  join_priming_and_control_I_F_C4_wt = join_priming_and_control_I_F_C4_wt,
+  join_priming_and_control_I_E_C3_cas10 = join_priming_and_control_I_E_C3_cas10,
+  join_priming_and_control_I_E_C4_cas10 = join_priming_and_control_I_E_C4_cas10,
+  join_priming_and_control_I_F_C3_cas10 = join_priming_and_control_I_F_C3_cas10,
+  join_priming_and_control_I_F_C4_cas10 = join_priming_and_control_I_F_C4_cas10
+)
+
+# Create empty list that processed data will be written to after processing
+normalized_dfs <- list()
+
+# Loop over files
+for (i in seq_along(joined_dfs)) {
+  dfs <- joined_dfs[[i]]
+  
+  # Remove the file extension for the new variable name
+  df_name <- names(joined_dfs)[i]
+  
+  # Directly process and store the result in the list, no intermediate variable
+  normalized_dfs[[paste0(
+    gsub("join_priming_and_control", "priming_enriched_coverage_ratio", df_name),
+    "_normalized"
+  )]] <- dfs %>%
+    mutate(
+      plus_reads_priming = plus_reads_priming + 0.01,
+      minus_reads_priming = minus_reads_priming + 0.01,
+      plus_reads_control = plus_reads_control + 0.01,
+      minus_reads_control = minus_reads_control + 0.01,
+      
+      # Calculate coverage ratios (priming / control) for both plus and minus strands
+      coverage_ratio_minus = ifelse(is.na(minus_reads_priming / minus_reads_control), 0, minus_reads_priming / minus_reads_control),
+      coverage_ratio_plus = ifelse(is.na(plus_reads_priming / plus_reads_control), 0, plus_reads_priming / plus_reads_control),
+      
+      # Calculate total coverage ratios (plus and minus combined)
+      coverage_ratio_combined = (coverage_ratio_plus) + (coverage_ratio_minus)
+    )
+}
+
+# View dataframes
+ #View(normalized_dfs[["priming_enriched_coverage_ratio_I_F_C4_cas10_normalized"]])
+```
+## Generate bins [windows] for enrichment score data to make smoother plots
+```{r}
+
+# Specify the bin size
+bin <- 25
+# Create an empty list to store the processed data frames
+normalized_dfs_windows <- list()
+
+# Loop over the data frames in 'normalized_dfs'
+for (df_name in names(normalized_dfs)) {
+  
+  # Extract the current data frame
+  df <- normalized_dfs[[df_name]]
+  
+  # Apply the binning and summarization process
+  df_binned <- df %>%
+    mutate(window = position %/% bin) %>%  # Create window column based on bin size
+    group_by(window) %>%  # Group by window
+    summarise(
+      sum_plus = sum(coverage_ratio_plus, na.rm = TRUE),  # Sum of coverage_ratio_plus for each bin
+      sum_minus = sum(coverage_ratio_minus, na.rm = TRUE),  # Sum of coverage_ratio_minus for each bin
+      sum_combined = sum(coverage_ratio_combined, na.rm = TRUE)  # Sum of coverage_ratio_minus for each bin
+    ) %>%
+    mutate(
+      start = (window * bin) + 1,  # Calculate the start position of the bin
+      stop = (window + 1) * bin    # Calculate the stop position of the bin
+    )
+  
+  new_df_name <- paste0(df_name, "_windows")
+  
+  # Store the output in the 'normalized_dfs_windows' list
+  normalized_dfs_windows[[new_df_name]] <- df_binned
+}
+
+# view a file to check 
+#View(normalized_dfs_windows[["priming_enriched_coverage_ratio_I_E_C4_normalized_windows"]])
+```
+## File looping to plot [windowed] enrichment score data (+/- strands plotted separately)
+```{r}
+for (df_name in names(normalized_dfs_windows)) {
+  # Check if "wt" is in the dataframe name
+  if (grepl("wt", df_name, ignore.case = TRUE)) {
+    plot_enrichment_windows_stranded <- ggplot() +
+      geom_area(
+        data = normalized_dfs_windows[[df_name]],
+        aes(x = start, y = (sum_plus)),
+        position = "identity",
+        fill = "black"
+      ) +
+      geom_area(
+        data = normalized_dfs_windows[[df_name]],
+        aes(x = start, y = (sum_minus * -1)),
+        position = "identity",
+        fill = "black"
+      ) +
+      xlab("Position (kb)") +
+      ylab ("Enrichment (+/-)") +
+      scale_x_continuous(
+        breaks = c(0, 1000, 2000, 3000, 4000, 5000, 6000),
+        labels = c("0", "1", "2", "3", "4", "5", "6")
+      ) +
+      scale_y_continuous(
+        labels = function(x)
+          sprintf("%.1e", x)  # Force scientific notation with one decimal place
+      ) +
+      ggtitle(paste(df_name)) +
+      theme_light() +
+      theme(
+        axis.text.x = element_text(color = "black", size = 08),
+        axis.text.y = element_text(color = "black", size = 08),
+        axis.title = element_text(size = 08),
+        legend.text = element_text(size = 08),
+        legend.title = element_text(size = 08),
+        plot.title = element_text(size = 08),
+        strip.background = element_rect(fill = NA),
+        strip.text = element_text(colour = "black", size = 08),
+        aspect.ratio = 0.3,
+        legend.position = "none",
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank()
+      )
+    print(plot_enrichment_windows_stranded)
+    ggsave(
+      filename = paste0("./output/alignments/figures/coverage/plasmids/enrichment/", df_name,  ".pdf"),
+      plot = plot_enrichment_windows_stranded,
+      width = 3.3
+    )
+  }
+}
+```
+## Assign distances from the protospacer (relative and absolute) of the raw (non-windowed) enrichment score data
+```{r}
+# First create dataframes with all info (relative, circular and absolute positions)
+# These can be used to plot +/- and upstream/downstream intermediate graphs
+
+# Define the starting location
+center_of_protospacer <- 3021
+max_range <- 2989  # Maximum range from the center of plasmid( half plasmid length excluding center_of_protospacer)
+sequence_length <- 5979  # Length of the plasmid (0 to 5978)
+# Create and empty list to store the processed data
+normalized_relative_position_dfs <- list()
+# Loop over the dataframes in the list
+for (i in seq_along(normalized_dfs)) {
+  # Get the name of the dataframe in the list
+  df_name <- names(normalized_dfs)[i]
+  # Process each dataframe and store it with the new name (original name + "_relative_positions")
+  normalized_relative_position_dfs[[paste0(df_name, "_relative_positions")]] <- normalized_dfs[[i]] %>%
+    mutate(
+      # Calculate circular position: wrapping from 0 to 5978 (position zero=center of protospacer)
+      circular_position = (position - center_of_protospacer) %% sequence_length,
+      # Calculate relative position: From -3021 to +3021, with wrapping
+      relative_position = ifelse(circular_position <= max_range, circular_position,
+                                 circular_position - sequence_length),
+      # Calculate absolute position: Distance from the center of protospacer
+      absolute_position = abs(relative_position)
+    ) %>%
+    # Sort by circular_position (position zero=center of protospacer)
+    arrange(circular_position)
+}
+#View(normalized_relative_position_dfs[["priming_enriched_coverage_ratio_I_F_C3_wt_normalized_relative_positions"]])
+
+```
+## Summarize enrichment quadrant counts (+/- strand and upstream/downstream from protospacer)
+```{r}
+  
+# Define the ranges for near and far
+range_near_min <- 0
+range_near_max <- 1499
+range_far_min <- 1500
+range_far_max <- 3000
+
+center_of_protospacer <- 3021
+
+# Initialize an empty list to store the results
+summed_quadrant_coverage_ratios <- list()
+
+# Loop over the list of dataframes and process them
+for (df_name in names(normalized_relative_position_dfs)) {
+  
+  # Extract the dataframe from the list
+  df <- normalized_relative_position_dfs[[df_name]]
+  
+  # Extract the array and priming information from the dataframe name
+  array <- str_extract(df_name, "(?<=C)\\d+")  # Extract the number after 'C' (e.g., 3 from 'C3')
+  priming <- str_extract(df_name, "(?<=_)([^_]+_[^_]+)(?=_C)")  # This captures the part before '_C' (e.g., 'I_F' from 'I_F_C3')
+  strain <- str_extract(df_name, "(?<=_)[a-zA-Z0-9]+(?=_normalized)")
+  
+  # Filter and calculate the sums for upstream and downstream coverage ratios
+  
+  # Summing upstream/downstream +/- (near ranges)
+  upstream_plus_near <- df %>%
+    filter(position <= center_of_protospacer & absolute_position >= range_near_min & absolute_position <= range_near_max) %>%
+    summarise(sum_upstream_plus_near = sum(coverage_ratio_plus, na.rm = TRUE))
+  
+  upstream_minus_near <- df %>%
+    filter(position <= center_of_protospacer & absolute_position >= range_near_min & absolute_position <= range_near_max) %>%
+    summarise(sum_upstream_minus_near = sum(coverage_ratio_minus, na.rm = TRUE))
+  
+  downstream_plus_near <- df %>%
+    filter(position >= center_of_protospacer & absolute_position >= range_near_min & absolute_position <= range_near_max) %>%
+    summarise(sum_downstream_plus_near = sum(coverage_ratio_plus, na.rm = TRUE))
+  
+  downstream_minus_near <- df %>%
+    filter(position >= center_of_protospacer & absolute_position >= range_near_min & absolute_position <= range_near_max) %>%
+    summarise(sum_downstream_minus_near = sum(coverage_ratio_minus, na.rm = TRUE))
+  
+  # Summing upstream/downstream +/- (far ranges)
+  upstream_plus_far <- df %>%
+    filter(position <= center_of_protospacer & absolute_position >= range_far_min & absolute_position <= range_far_max) %>%
+    summarise(sum_upstream_plus_far = sum(coverage_ratio_plus, na.rm = TRUE))
+  
+  upstream_minus_far <- df %>%
+    filter(position <= center_of_protospacer & absolute_position >= range_far_min & absolute_position <= range_far_max) %>%
+    summarise(sum_upstream_minus_far = sum(coverage_ratio_minus, na.rm = TRUE))
+  
+  downstream_plus_far <- df %>%
+    filter(position >= center_of_protospacer & absolute_position >= range_far_min & absolute_position <= range_far_max) %>%
+    summarise(sum_downstream_plus_far = sum(coverage_ratio_plus, na.rm = TRUE))
+  
+  downstream_minus_far <- df %>%
+    filter(position >= center_of_protospacer & absolute_position >= range_far_min & absolute_position <= range_far_max) %>%
+    summarise(sum_downstream_minus_far = sum(coverage_ratio_minus, na.rm = TRUE))
+  
+  # Combine the results into one dataframe
+  summed_coverage <- bind_cols(upstream_plus_near, upstream_minus_near, downstream_plus_near, downstream_minus_near,
+                               upstream_plus_far, upstream_minus_far, downstream_plus_far, downstream_minus_far)
+  
+  # Add the total summed column (sum of all plus and minus values for near and far ranges)
+  summed_coverage$total_summed <- summed_coverage$sum_upstream_plus_near + 
+    summed_coverage$sum_upstream_minus_near + 
+    summed_coverage$sum_downstream_plus_near + 
+    summed_coverage$sum_downstream_minus_near +
+    summed_coverage$sum_upstream_plus_far + 
+    summed_coverage$sum_upstream_minus_far + 
+    summed_coverage$sum_downstream_plus_far + 
+    summed_coverage$sum_downstream_minus_far
+  
+  # Add the dataframe name to the result for identification
+  summed_coverage$df_name <- df_name
+  
+  # Add the array and priming columns
+  summed_coverage$array <- array
+  summed_coverage$priming <- priming
+  summed_coverage$strain <- strain
+  
+  # Reshape the summed data and calculate percentages
+  reshaped_counts <- summed_coverage %>%
+    tidyr::pivot_longer(
+      cols = starts_with("sum_"), 
+      names_to = "category", 
+      values_to = "raw_sum"
+    ) %>%
+    mutate(total_summed = summed_coverage$total_summed[1],  # Carry total_summed through
+           # Create strand based on category (plus or minus)
+           strand = case_when(
+             str_detect(category, "plus") ~ "plus",
+             str_detect(category, "minus") ~ "minus",
+             TRUE ~ "unknown"
+           ),
+           # Assign location: "upstream" or "downstream"
+           location = case_when(
+             str_detect(category, "upstream") ~ "upstream",
+             str_detect(category, "downstream") ~ "downstream",
+             TRUE ~ "unknown"
+           ),
+           # Determine range based on position
+           range = case_when(
+             str_detect(category, "near") ~ "near",  # Ranges from near
+             str_detect(category, "far") ~ "far",    # Ranges from far
+             TRUE ~ "unknown"
+           ),
+           # Calculate percentage based on total summed
+           percentage = raw_sum / total_summed) %>%
+    # Keep the relevant columns in the final reshaped dataframe
+    select(df_name, strain, array, priming, category, strand, range, location, raw_sum, percentage, total_summed)
+  
+  # Store the reshaped data in the list
+  summed_quadrant_coverage_ratios[[df_name]] <- reshaped_counts
+}
+
+# Combine all results into a single dataframe
+final_results <- bind_rows(summed_quadrant_coverage_ratios)
+
+# View the final reshaped dataframe with raw sums and percentages
+head(final_results)
+
+```
+## Plot enrichment quadrant counts summary data - WT strain
+```{r}
+quandrant_enrichment_wt <- ggplot(
+  final_results %>%
+    filter(strain == "wt") %>%
+    mutate(
+      # Create interaction between location and range
+      location_range = interaction(location, range, sep = " - "),
+      # Set the factor levels for location_range
+      location_range = factor(
+        location_range,
+        levels = c(
+          "upstream - far",
+          "upstream - near",
+          "downstream - near",
+          "downstream - far"
+        )
+      )
+    ) %>%
+    group_by(location_range, df_name, strand, priming, array, strain) %>%
+    summarise(
+      total_percentage = sum(percentage, na.rm = TRUE),
+      .groups = "drop"
+    ),
+  aes(x = location_range, y = total_percentage, fill = strand)
+) +
+  geom_bar(stat = "identity",
+           position = "stack",
+           color = "black") +  # Stacked bars for quadrant breakdown
+  labs(y = "Enrichment (proportion)") +
+  facet_wrap(array ~ priming, labeller = "label_both") +
+  scale_fill_manual(values = c("#44BB99", "#99DDFF")) +  # Colors for the 'plus' and 'minus' strands
+  guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+  ggtitle("Enrichment quadrant counts summary data - WT strain") +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(color = "black", size = 8),
+    axis.text.y = element_text(color = "black", size = 8),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 08),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(size = 8, color = "black"),
+    aspect.ratio = 0.3,
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank()
+  )
+
+# Print the plot
+print(quandrant_enrichment_wt)
+  ggsave(
+      "./output/alignments/figures/coverage/plasmids/enrichment/quandrant_enrichment_summary_wt.pdf",
+      quandrant_enrichment_wt,
+      width = 3.3
+    )
+
+```
+## Plot enrichment quadrant counts summary data - cas10 strain
+```{r}
+quandrant_enrichment_cas10 <- ggplot(
+  final_results %>%
+    filter(strain == "cas10") %>%
+    mutate(
+      # Create interaction between location and range
+      location_range = interaction(location, range, sep = " - "),
+      # Set the factor levels for location_range
+      location_range = factor(
+        location_range,
+        levels = c(
+          "upstream - far",
+          "upstream - near",
+          "downstream - near",
+          "downstream - far"
+        )
+      )
+    ) %>%
+    group_by(location_range, df_name, strand, priming, array, strain) %>%
+    summarise(
+      total_percentage = sum(percentage, na.rm = TRUE),
+      .groups = "drop"
+    ),
+  aes(x = location_range, y = total_percentage, fill = strand)
+) +
+  geom_bar(stat = "identity",
+           position = "stack",
+           color = "black") +  # Stacked bars for quadrant breakdown
+  labs(y = "Enrichment (proportion)") +
+  facet_wrap(array ~ priming, labeller = "label_both") +
+  scale_fill_manual(values = c("#44BB99", "#99DDFF")) +  # Colors for the 'plus' and 'minus' strands
+  guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+  ggtitle("Enrichment quadrant counts summary data - cas10 strain") +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(color = "black", size = 8),
+    axis.text.y = element_text(color = "black", size = 8),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 8),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(size = 8, color = "black"),
+    aspect.ratio = 0.3,
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank()
+  )
+# Print the plot
+print(quandrant_enrichment_cas10)
+ ggsave(
+      "./output/alignments/figures/coverage/plasmids/enrichment/quandrant_enrichment_summary_cas10.pdf",
+      quandrant_enrichment_cas10,
+      width = 3.3
+    )
+
+```
+## Collapse combined (+/- strand combined) enrichment scores by absolute distance from protospacer
+```{r}
+ # Since absolute position occurs twice in the normalized_relative_position_dfs (b/c upstream and downstream have same absolute position relative to the protospacer), 
+  # We need to group by absolute position then collapse down (combine) to get one value 
+
+# Create and empty list to store the processed data
+
+collapsed_absolute_position_dfs <- list()
+
+# Loop over the dataframes in the list
+for (i in seq_along(normalized_relative_position_dfs)) {
+  # Get the name of the dataframe in the list
+  df_name <- names(normalized_relative_position_dfs)[i]
+  # Process each dataframe and store it with the new name (original name + "_relative_positions")
+  collapsed_absolute_position_dfs[[paste0(df_name, "_absolute_collapsed")]] <- normalized_relative_position_dfs[[i]] %>%
+    group_by(absolute_position)%>%
+    summarise(
+    coverage_ratio_plus_collapsed = sum(coverage_ratio_plus, na.rm = TRUE),
+    coverage_ratio_minus_collapsed = sum(coverage_ratio_minus, na.rm = TRUE),
+    coverage_ratio_combined_collapsed = sum(coverage_ratio_combined, na.rm = TRUE))
+}
+
+#View(collapsed_absolute_position_dfs[["priming_enriched_coverage_ratio_I_F_C3_wt_normalized_relative_positions_absolute_collapsed"]])
+```
+## Summarize enrichment scores based on absolute distance (near vs far) from protospacer
+```{r}
+  
+# Define the ranges
+range_near_min <- 0
+range_near_max <- 1499
+range_far_min <- 1500
+range_far_max <- 3000
+
+# Function to calculate sum and percentages for each category
+summarize_coverage_ratios <- function(df, range_near_min, range_near_max, range_far_min, range_far_max) {
+  # Summarize coverage ratios for combined, plus, and minus strands
+  summarized <- df %>%
+    summarize(
+      combined_sum_range_near = sum(ifelse(absolute_position >= range_near_min & absolute_position <= range_near_max, 
+                                           coverage_ratio_combined_collapsed, 0), na.rm = TRUE),
+      combined_sum_range_far = sum(ifelse(absolute_position >= range_far_min & absolute_position <= range_far_max, 
+                                          coverage_ratio_combined_collapsed, 0), na.rm = TRUE),
+      
+      plus_sum_range_near = sum(ifelse(absolute_position >= range_near_min & absolute_position <= range_near_max, 
+                                       coverage_ratio_plus_collapsed, 0), na.rm = TRUE),
+      plus_sum_range_far = sum(ifelse(absolute_position >= range_far_min & absolute_position <= range_far_max, 
+                                      coverage_ratio_plus_collapsed, 0), na.rm = TRUE),
+      
+      minus_sum_range_near = sum(ifelse(absolute_position >= range_near_min & absolute_position <= range_near_max, 
+                                        coverage_ratio_minus_collapsed, 0), na.rm = TRUE),
+      minus_sum_range_far = sum(ifelse(absolute_position >= range_far_min & absolute_position <= range_far_max, 
+                                       coverage_ratio_minus_collapsed, 0), na.rm = TRUE)
+    ) %>%
+    mutate(
+      # Calculate total sums for each strand (near and far)
+      combined_total_sum = combined_sum_range_near + combined_sum_range_far,
+      plus_total_sum = plus_sum_range_near + plus_sum_range_far,
+      minus_total_sum = minus_sum_range_near + minus_sum_range_far,
+      
+      # Calculate percentages for each range (near and far) as decimals
+      combined_range_near_percent = combined_sum_range_near / combined_total_sum,
+      combined_range_far_percent = combined_sum_range_far / combined_total_sum,
+      
+      plus_range_near_percent = plus_sum_range_near / plus_total_sum,
+      plus_range_far_percent = plus_sum_range_far / plus_total_sum,
+      
+      minus_range_near_percent = minus_sum_range_near / minus_total_sum,
+      minus_range_far_percent = minus_sum_range_far / minus_total_sum
+    )
+  
+  return(summarized)
+}
+
+# Initialize an empty dataframe to store the results
+collapsed_absolute_position_summary <- data.frame()
+
+# Loop over the dataframes in the list and directly append the results
+for (df_name in names(collapsed_absolute_position_dfs)) {
+  
+  # Get the current dataframe
+  df <- collapsed_absolute_position_dfs[[df_name]]
+  
+  # Extract the 'strain' (either 'wt' or 'cas10') from df_name
+  strain <- str_extract(df_name, "(wt|cas10)")  # This captures 'wt' or 'cas10' from the df_name string
+  
+  # Summarize the data
+  sum_counts <- summarize_coverage_ratios(df, range_near_min, range_near_max, range_far_min, range_far_max) %>%
+    mutate(sample = df_name)%>%
+    mutate(strain = strain)# Add the processed dataframe name into the sample column
+  
+  # Reshape the data into long format for stacking within the same loop
+  reshaped_counts <- sum_counts %>%
+    tidyr::pivot_longer(
+      cols = starts_with("combined_range") | starts_with("plus_range") | starts_with("minus_range"), 
+      names_to = "category", 
+      values_to = "percent"
+    ) %>%
+    # Create the `strand` and `range` columns
+    mutate(
+      strand = case_when(
+        str_detect(category, "combined") ~ "combined",
+        str_detect(category, "plus") ~ "plus",
+        str_detect(category, "minus") ~ "minus",
+        TRUE ~ "unknown"
+      ),
+      range = case_when(
+        str_detect(category, "near") ~ "near",
+        str_detect(category, "far") ~ "far",
+        TRUE ~ "unknown"
+      ),
+      category = factor(category, levels = c(
+        "combined_range_near_percent", "combined_range_far_percent", 
+        "plus_range_near_percent", "plus_range_far_percent", 
+        "minus_range_near_percent", "minus_range_far_percent"
+      ))
+    )
+  
+  # Append the reshaped data to the summary dataframe
+  collapsed_absolute_position_summary <- bind_rows(collapsed_absolute_position_summary, reshaped_counts)
+}
+```
+## Generate bins [windows] of collapsed enrichment scores by absolute distance from protospacer
+```{r}
+# Specify the bin size
+bin <- 25
+
+# Create an empty list to store the processed data frames
+collapsed_absolute_position_dfs_windows <- list()
+
+# Loop over the data frames in 'normalized_relative_position_dfs'
+for (df_name in names(collapsed_absolute_position_dfs)) {
+  
+  # Extract the current data frame
+  df <- collapsed_absolute_position_dfs[[df_name]]
+  
+  # Apply the binning and summarization process
+  df_binned <- df %>%
+    mutate(window = absolute_position %/% bin) %>%  # Create window column based on bin size
+    group_by(window) %>%  # Group by window
+    summarise(
+      sum_combined= sum(coverage_ratio_combined_collapsed, na.rm = TRUE),  # Sum of coverage_ratio_combined for each bin
+      sum_plus= sum(coverage_ratio_plus_collapsed, na.rm = TRUE),
+      sum_minus= sum(coverage_ratio_minus_collapsed, na.rm = TRUE)
+    ) %>%
+    mutate(
+      start = (window * bin) + 1,  # Calculate the start position of the bin
+      stop = (window + 1) * bin    # Calculate the stop position of the bin
+    )
+  new_df_name <- paste0(df_name, "_windows")
+  
+  # Store the output in the 'normalized_relative_position_dfs_windows' list
+  collapsed_absolute_position_dfs_windows[[new_df_name]] <- df_binned
+}
+
+# view a file to check 
+#View(collapsed_absolute_position_dfs_windows[["priming_enriched_coverage_ratio_I_E_C3_wt_normalized_relative_positions_absolute_collapsed_windows"]])
+```
+## File looping to plot collapsed enrichment scores by absolute distance from protospacer [windows]
+```{r}
+
+for (df_name in names(collapsed_absolute_position_dfs_windows)) {
+  combined_plot_windows <- ggplot() +
+    geom_area(
+      data = collapsed_absolute_position_dfs_windows[[df_name]],
+      aes(x = start, y = sum_combined),
+      position = "identity",
+      fill = "black"
+    ) +
+    xlab("Absolute distance from the protospacer (kb)") +
+    ylab ("Enrichment") +
+    ggtitle(paste0(df_name)) +
+    scale_x_continuous(breaks = c(0, 1000, 2000, 3000),
+                       labels = c("0", "1", "2", "3")) +
+    scale_y_continuous(
+      labels = function(x)
+        sprintf("%.1e", x)  # Force scientific notation with one decimal place
+    ) +
+    theme_light() +
+    theme(
+      axis.text.x = element_text(color = "black", size = 08),
+      axis.text.y = element_text(color = "black", size = 08),
+      axis.title = element_text(size = 08),
+      legend.text = element_text(size = 08),
+      legend.title = element_text(size = 08),
+      plot.title = element_text(size = 08),
+      strip.background = element_rect(fill = NA),
+      strip.text = element_text(colour = "black", size = 08),
+      aspect.ratio = 0.3,
+      legend.position = "none",
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_blank()
+    )
+  print(combined_plot_windows)
+  ggsave(
+      filename = paste0("./output/alignments/figures/coverage/plasmids/enrichment/", df_name,  ".pdf"),
+      plot = combined_plot_windows,
+      width = 3.3
+    )
+  
+}
+```
+

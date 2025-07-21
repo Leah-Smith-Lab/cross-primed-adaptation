@@ -1,0 +1,606 @@
+---
+title: "Plasmid loss and gel quantitation"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  html_notebook: default
+editor_options:
+  chunk_output_type: inline
+---
+```{r setup, include=FALSE}
+# Set the working directory for the whole document
+knitr::opts_knit$set(root.dir = "~/Data_analysis/")
+```
+## Load packages 
+```{r}
+pacman::p_load(dplyr,tidyr, ggplot2, ggh4x,readxl,writexl,stringr,forcats,scales, RColorBrewer)
+```
+## Growth comparison between empty vector and Cas1-2 (type III) expression strains
+```{r}
+
+EV_vs_Cas1_2_growth_curve <- read_excel("./input/plasmid_loss/2023_12_16_JS26_growth_tidy.xlsx")%>%
+  mutate(Plasmid = fct_relevel(Plasmid, 
+                               "pPF781", "pPF3307"))
+
+EV_vs_Cas1_2_growth_curve_plot <-
+  ggplot(EV_vs_Cas1_2_growth_curve,
+             aes(x=Hours, y=OD600))+
+  geom_line(aes(color=Plasmid), 
+            stat="summary", fun="mean", linewidth=0.2)+
+  geom_errorbar(aes(color=Plasmid),
+                stat='summary', fun.data="mean_se", linewidth=1, width=0)+
+  stat_smooth(method="loess", span=0.05, se=TRUE, aes(color=Plasmid, fill=Plasmid), alpha=0.2) +
+  scale_color_manual(name="Plasmid", values=c("#77AADD","#FFAABB"))+
+  scale_fill_manual(name="Plasmid", values=c("#77AADD","#FFAABB"))+
+  theme_light()+
+  xlab("Time (days)") +
+  ylab("OD600 nm") +
+  ggtitle("WT growth (empty vector versus Cas1-2 expression vector)") +
+  scale_y_continuous(limits = c(0, 1.5), breaks = seq(0,1.5, by = 0.5))+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title = element_text(size = 08),
+    legend.text = element_text(size = 08),
+    legend.title = element_text(size = 08),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(colour = "black", size = 08),
+    legend.position = "top",
+  panel.grid.minor = element_blank(), panel.grid.major = element_blank(),
+  aspect.ratio = 1
+  )
+
+print(EV_vs_Cas1_2_growth_curve_plot)
+
+ggsave("./output/plasmid_loss/figures/growth_curve_Cas1-2_vs_EV_control.pdf",
+     EV_vs_Cas1_2_growth_curve_plot, width=3.3)
+```
+
+## WT versus Cas10 plasmid loss (+/- type III-A Cas1-2 ovexpression)
+```{r, warning=FALSE}
+WT_vs_cas10_plasmid_loss <- read_excel("./input/plasmid_loss/Plasmid_loss_2024-01-15_tidy.xlsx")%>%
+  mutate(
+    Strain = fct_relevel(Strain,
+                              "WT", "cas10"),
+  Plasmid = fct_relevel(Plasmid, 
+                               "pPF781", "pPF3307"),
+  Priming = fct_relevel(Priming,
+                               "Control", "I-E", "I-F")
+  )
+
+# plotting all data combined by priming #
+
+WT_vs_cas10_plasmid_loss_plot <-
+  ggplot(WT_vs_cas10_plasmid_loss,
+             aes(x=Day, y=`mCherry+`))+
+  geom_line(aes(color=interaction(Strain, Plasmid)), 
+            stat="summary", fun="mean", linewidth=0.2)+
+  geom_point(aes(color=interaction(Strain, Plasmid), 
+                 fill=interaction(Strain, Plasmid),
+                 shape=interaction(Strain, Plasmid)),
+             stat="summary", fun="mean", size=1)+
+  geom_errorbar(aes(color=interaction(Strain, Plasmid)),
+                stat='summary', fun.data="mean_se", linewidth=1, width=0)+
+  scale_shape_manual(name="legend", values=c(21,22,23,24))+
+  scale_color_manual(name="legend", values=c("#77AADD", "#EE8866","#FFAABB", "#EEDD88"))+
+  scale_fill_manual(name="legend", values=c("#77AADD", "#EE8866","#FFAABB", "#EEDD88"))+
+  theme_light()+
+  xlab("Time (days)") +
+  ylab("mCherry+ (%) of cells") +
+  ggtitle("WT vs cas10 plasmid loss (+/- Cas1-2 (III-A) overexpression")+
+  labs(fill="Expression vector")+
+  ggh4x::facet_grid2(~Priming, scales="free", independent = "x",  labeller=label_both)+
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0,100, by = 20))+
+  theme(
+    axis.text.x = element_text(color = "black", size = 7),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 8),
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    aspect.ratio = 0.5
+  )
+  print(WT_vs_cas10_plasmid_loss_plot)
+  
+  ggsave("./output/plasmid_loss/figures/WT_vs_cas10_plasmid_loss_plot.pdf",
+     WT_vs_cas10_plasmid_loss_plot, width=3.3)
+
+```
+## Day 3 comparison (WT vs cas10) +/- Cas1-2 expression
+```{r, warning=FALSE}
+# boxplots to compare day 3 of plasmid loss
+  
+Day_3_comparison <-ggplot(subset(WT_vs_cas10_plasmid_loss, 
+                    Priming %in% c("I-E", "I-F") & Day=="3"),
+             aes(x=Strain, y=`mCherry+`, fill=Strain, shape=Strain))+
+  geom_boxplot(color="black")+
+  geom_point(color="black",size=2) +
+  xlab("Strain") +
+  ylab("mCherry+ (%) of cells") +
+  ggtitle("Day 3 comparison (WT vs cas10) +/- Cas1-2 expression")+
+  scale_shape_manual(name="strain", values=c(23,24))+
+  scale_fill_manual(name="strain", values=c("#FFAABB", "#EEDD88"))+
+  scale_y_continuous(expand = expansion(mult = c(0.2, 0.2)))+
+  ggh4x::facet_grid2(~Plasmid~Priming, scales="free", independent = "y",  labeller=label_both)+
+  theme_light()+
+  theme(
+    axis.text.x = element_text(color = "black", size = 8),
+    axis.text.y = element_text(color = "black", size = 8),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 8),
+    legend.position = "none", 
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    aspect.ratio = 0.4
+    )
+  
+print(Day_3_comparison)
+
+ggsave("./output/plasmid_loss/figures/WT_vs_cas10_plasmid_loss_day3_comparison.pdf",
+     Day_3_comparison, width=3.3)
+```
+## Type I-E/I-F plasmid loss during Cas1-2 overexpression (versus empty vector)
+```{r, warning=FALSE}
+Cas1_2_variants <- read_excel("./input/plasmid_loss/Plasmid_loss_2024-04-30_tidy.xlsx")%>%
+  filter(Plasmid %in% c("pPF781", "pPF3307", "pPF4036", "pPF4037"))%>%
+  mutate(
+  Plasmid = fct_relevel(Plasmid, 
+                               "pPF781", "pPF3307", "pPF4036", "pPF4037"),
+  Priming = fct_relevel(Priming,
+                               "Control", "I-E", "I-F"))
+
+
+Type_I_Cas1_2_variants_vs_EV<-
+  ggplot(subset(Cas1_2_variants, Plasmid %in% c("pPF781", "pPF4036", "pPF4037") &
+                  Priming %in% c("I-E", "I-F")),
+             aes(x=Day, y=`mCherry+`))+
+  geom_line(aes(color=interaction(Strain, Plasmid)), 
+            stat="summary", fun="mean", linewidth=0.2)+
+  geom_point(aes(color=interaction(Strain, Plasmid), 
+                 fill=interaction(Strain, Plasmid),
+                 shape=interaction(Strain, Plasmid)),
+             stat="summary", size=1)+
+  geom_errorbar(aes(color=interaction(Strain, Plasmid)),
+                stat='summary', fun.data="mean_se", linewidth=1, width=0)+
+  scale_shape_manual(name="legend", values=c(23,22,24))+
+  scale_color_manual(name="legend", values=c("#77AADD", "#44BB99","#BBCC33"))+
+  scale_fill_manual(name="legend", values=c("#77AADD", "#44BB99","#BBCC33"))+
+  xlab("Time (days)") +
+  ylab("mCherry+ (%) of cells") +
+  ggtitle("Type_I-E/I-F Cas1-2 variants versus empty vector")+
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0,100, by = 20))+
+  ggh4x::facet_grid2(~Priming, scales="free", independent = "x",  labeller=label_both)+
+   theme_light()+
+ theme(
+    axis.text.x = element_text(color = "black", size = 7),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 8),
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    aspect.ratio = 0.5
+  )
+print(Type_I_Cas1_2_variants_vs_EV)
+
+ggsave("./output/plasmid_loss/figures/Type_I_Cas1-2_variants_vs_EV_plasmid_loss.pdf",
+     Type_I_Cas1_2_variants_vs_EV, width=3.3)
+```
+
+
+## Type I-E/I-F plasmid loss during Cas1-2 overexpression (versus Type III-A Cas1-2)
+```{r, warning=FALSE}
+Type_I_Cas1_2_variants_vs_type_III<-
+  ggplot(subset(Cas1_2_variants, Plasmid %in% c("pPF3307", "pPF4036", "pPF4037") &
+                  Priming %in% c("I-E", "I-F")),
+             aes(x=Day, y=`mCherry+`))+
+  geom_line(aes(color=interaction(Strain, Plasmid)), 
+            stat="summary", fun="mean", linewidth=0.2)+
+  geom_point(aes(color=interaction(Strain, Plasmid), 
+                 fill=interaction(Strain, Plasmid),
+                 shape=interaction(Strain, Plasmid)),
+             stat="summary", size=1)+
+  geom_errorbar(aes(color=interaction(Strain, Plasmid)),
+                stat='summary',fun.data="mean_se", linewidth=1, width=0)+
+   scale_shape_manual(name="legend", values=c(23,22,24))+
+  scale_color_manual(name="legend", values=c("#FFAABB", "#44BB99","#BBCC33"))+
+  scale_fill_manual(name="legend",values=c("#FFAABB", "#44BB99","#BBCC33"))+
+  xlab("Time (days)") +
+  ylab("mCherry+ (%) of cells") +
+  ggtitle("Type I-E/I-F Cas1-2 variants versus type III-A")+
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0,100, by = 20))+
+  ggh4x::facet_grid2(~Priming, scales="free", independent = "x",  labeller=label_both)+
+   theme_light()+
+ theme(
+    axis.text.x = element_text(color = "black", size = 7),
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(size = 12),
+    strip.background = element_rect(fill = NA),
+    strip.text = element_text(color = "black", size = 8),
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    aspect.ratio = 0.5
+  )
+print(Type_I_Cas1_2_variants_vs_type_III)
+
+ggsave("./output/plasmid_loss/figures/Type_I_Cas1-2_variants_vs_type_III_plasmid_loss.pdf",
+     Type_I_Cas1_2_variants_vs_type_III, width=3.3)
+```
+## Read in type III overexpression gel quantitation data, reformat, normalize by control
+```{r}
+
+####### type III overexpression in CRISPR1 #####
+
+# Step 1: Read the Excel file and preprocess the data
+type_III_overexpression_CRISPR1_array <- read_xlsx("./input/priming_gel_quantitations/Adaptation_gel_quantitation.xlsx", sheet = "2024-04-05_CRISPR1_expansion") %>%
+  rename(
+    band_number = `Band No.`,  # Renaming 'Band No.'
+    band_percent = `Band %`,   # Renaming 'Band %'
+    lane = Lane                # Renaming 'Lane'
+  ) %>%
+  mutate(
+    # Create the 'expression' column based on 'lane'
+    expression = case_when(
+      lane %in% 1:3 ~ "control",  # Lane 1-3 are control
+      lane %in% 4:6 ~ "III-A",      
+      TRUE ~ NA_character_       # NA for other lanes
+    ),
+    priming = "I-E",  # Set 'priming' to "I-E" for all rows
+    array = 1         # Add new column 'array' and set it to 1 for all rows
+  ) %>%
+  # Step 2: Calculate the average Band % for each 'band_number', 'expression', and 'priming'
+  group_by(band_number, expression, priming, array) %>%  # Include 'array' in the grouping
+  mutate(
+    avg_band_percent = mean(band_percent, na.rm = TRUE),  # Calculate average across replicates
+    avg_band_percent_sd = sd(band_percent, na.rm = TRUE),    # Calculate the standard deviation of Band %
+    avg_band_percent_se = avg_band_percent_sd / sqrt(n())    # Calculate the standard error of Band %
+  ) %>%
+  # Step 3: Calculate the control average Band % for each 'band_number'
+  group_by(band_number) %>%
+  mutate(
+    control_avg = mean(band_percent[expression == "control"], na.rm = TRUE)  # Control average per band_number
+  ) %>%
+  # Step 4: Normalize Band % for 'I-E' and 'I-F' relative to the control average
+  mutate(
+    normalized_band_percent = case_when(
+      expression == "control" ~ 1,  # Normalize control to 1
+      expression %in% c("I-E", "I-F", "III-A") ~ band_percent / control_avg,  # Normalize I-E and I-F by control
+      TRUE ~ NA_real_  # Set NA for any other expressions
+    )
+  ) %>%
+  ungroup()  # Remove grouping after the calculation
+
+# Step 5: Summarize the data to get one row per band_number, expression, priming, and array
+type_III_overexpression_CRISPR1_array_summary <- type_III_overexpression_CRISPR1_array %>%
+  group_by(band_number, expression, priming, array, avg_band_percent, avg_band_percent_sd, avg_band_percent_se) %>%
+  summarize(
+    normalized_band_percent_mean = mean(normalized_band_percent, na.rm = FALSE),
+    normalized_band_percent_sd = sd(normalized_band_percent, na.rm = FALSE),
+    normalized_band_percent_se = sd(normalized_band_percent, na.rm = FALSE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+####### type III overexpression in CRISPR2 #####
+
+# Step 1: Read the Excel file and preprocess the data
+type_III_overexpression_CRISPR2_array <- read_xlsx("./input/priming_gel_quantitations/Adaptation_gel_quantitation.xlsx", sheet = "2024-04-05_CRISPR2_expansion") %>%
+  rename(
+    band_number = `Band No.`,  # Renaming 'Band No.'
+    band_percent = `Band %`,   # Renaming 'Band %'
+    lane = Lane                # Renaming 'Lane'
+  ) %>%
+  mutate(
+    # Create the 'expression' column based on 'lane'
+    expression = case_when(
+      lane %in% 1:3 ~ "control",  # Lane 1-3 are control
+      lane %in% 4:6 ~ "III-A",      
+      TRUE ~ NA_character_       # NA for other lanes
+    ),
+    priming = "I-F",  # Set 'priming' to "I-E" for all rows
+    array = 2         # Add new column 'array' and set it to 1 for all rows
+  ) %>%
+  # Step 2: Calculate the average Band % for each 'band_number', 'expression', and 'priming'
+  group_by(band_number, expression, priming, array) %>%  # Include 'array' in the grouping
+  mutate(
+    avg_band_percent = mean(band_percent, na.rm = TRUE),  # Calculate average across replicates
+    avg_band_percent_sd = sd(band_percent, na.rm = TRUE),    # Calculate the standard deviation of Band %
+    avg_band_percent_se = avg_band_percent_sd / sqrt(n())    # Calculate the standard error of Band %
+) %>%
+  # Step 3: Calculate the control average Band % for each 'band_number'
+  group_by(band_number) %>%
+  mutate(
+    control_avg = mean(band_percent[expression == "control"], na.rm = TRUE)  # Control average per band_number
+  ) %>%
+  # Step 4: Normalize Band % for 'I-E' and 'I-F' relative to the control average
+  mutate(
+    normalized_band_percent = case_when(
+      expression == "control" ~ 1,  # Normalize control to 1
+      expression %in% c("I-E", "I-F", "III-A") ~ band_percent / control_avg,  # Normalize I-E and I-F by control
+      TRUE ~ NA_real_  # Set NA for any other expressions
+    )
+  ) %>%
+  ungroup()  # Remove grouping after the calculation
+
+# Step 5: Summarize the data to get one row per band_number, expression, priming, and array
+type_III_overexpression_CRISPR2_array_summary <- type_III_overexpression_CRISPR2_array %>%
+  group_by(band_number, expression, priming, array, avg_band_percent, avg_band_percent_sd, avg_band_percent_se) %>%
+  summarize(
+    normalized_band_percent_mean = mean(normalized_band_percent, na.rm = FALSE),
+    normalized_band_percent_sd = sd(normalized_band_percent, na.rm = FALSE),
+    normalized_band_percent_se = sd(normalized_band_percent, na.rm = FALSE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# Combine both type III overexpression dfs (CRIPSR1 and CRISPR2 together) #####
+combined_typeIII_overexpression_summary <- bind_rows(
+  type_III_overexpression_CRISPR1_array_summary,
+  type_III_overexpression_CRISPR2_array_summary
+)
+
+```
+## Plot average band intensities (type III-A Cas1-2 overexpression versus control)
+```{r}
+
+combined_typeIII_overexpression_plot<-ggplot()+
+  geom_bar(data=subset(combined_typeIII_overexpression_summary, 
+                       expression %in% c("control","III-A") & band_number <8), 
+           aes(
+             x=band_number, y= avg_band_percent, fill=expression),
+           position = position_dodge(width = 0.9), stat="identity", color="black")+
+  geom_errorbar(data=subset(combined_typeIII_overexpression_summary,
+                              expression %in% c("control", "III-A") & band_number < 8), 
+                aes(
+                  x = band_number,
+                  ymin = avg_band_percent - avg_band_percent_se,  # Lower bound of error bar
+                  ymax = avg_band_percent + avg_band_percent_se,
+                  group = interaction(band_number, expression)# Upper bound of error bar
+                ),
+                position = position_dodge(width = 0.9),  # Align error bars with bars
+                width = 0.2, color = "black")+  # Adjust error bar width and color
+  xlab("Number of spacers") +
+  ylab("DNA intensity
+       (% of total)") +
+  ggtitle("Band intensities (type III-A Cas1-2 overexpression change versus control)")+
+  theme_light()+
+  scale_x_continuous(
+    breaks = 1:7,  # Explicitly set the breaks to be from 0 to 6
+    labels = c("0", "1", "2", "3", "4", "5", "6")  # Custom labels for the breaks
+  ) +
+  guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+  scale_fill_manual(values=c("#77AADD","#FFAABB"))+
+  ggh4x::facet_grid2(~array, labeller=label_both, scales = "free_x")+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title= element_text(size= 08),
+    legend.text=element_text(size=08),
+    legend.title=element_text(size=08),
+    plot.title = element_text(size=12),
+    strip.background =element_rect(fill=NA),
+    strip.text = element_blank(),
+    aspect.ratio = 0.5,
+    legend.position = "top",
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank())
+print(combined_typeIII_overexpression_plot)
+
+ggsave("./output/priming_gel_quantitations/figures/Type_III_versus_control_band_intensities.pdf",
+     combined_typeIII_overexpression_plot, width=3.3)
+```
+
+## Plot normalized band intensities (type III-A Cas1-2 overexpression change relative to control)
+```{r}
+fold_change_in_typeIII_overexpression<-ggplot()+
+  geom_bar(data=subset(combined_typeIII_overexpression_summary, expression %in% c("I-E", "I-F", "III-A") & band_number <8), 
+           aes(x=band_number, y= normalized_band_percent_mean -1,
+               fill=expression),
+           position ="dodge", stat="identity", color="black")+
+  geom_errorbar(data = subset(combined_typeIII_overexpression_summary, 
+                              expression %in% c("I-E", "I-F", "III-A") & band_number < 8), 
+                aes(
+                  x = band_number,
+                  ymin = normalized_band_percent_mean - 1 - normalized_band_percent_se,  # Lower bound of error
+                  ymax = normalized_band_percent_mean - 1 + normalized_band_percent_se,
+                  # Upper bound of error
+                ),
+                width = 0.2, color = "black") +  # Adjust error bar width and color
+  xlab("Number of spacers") +
+  ylab("Change in DNA intensity") +
+  ggtitle("Normalized band intensities (type III-A Cas1-2 overexpression relative to control)")+
+  theme_light()+
+  scale_x_continuous(
+    breaks = 1:7,  # Explicitly set the breaks to be from 0 to 6
+    labels = c("0", "1", "2", "3", "4", "5", "6")  # Custom labels for the breaks
+  ) +
+  scale_fill_manual(values=c("#AA4499"))+
+  ggh4x::facet_grid2(~expression~array, labeller=label_both)+
+  theme(
+    axis.text.x = element_text(color = "black", size = 08),
+    axis.text.y = element_text(color = "black", size = 08),
+    axis.title= element_text(size= 08),
+    legend.text=element_text(size=08),
+    legend.title=element_text(size=08),
+    plot.title = element_text(size=12),
+    strip.background =element_rect(fill=NA),
+    strip.text = element_blank(),
+    aspect.ratio = 0.3,
+    legend.position = "none",
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank())
+print(fold_change_in_typeIII_overexpression)
+
+ggsave("./output/priming_gel_quantitations/figures/Type_III_intensities_fold_change_versus_control.pdf",
+     fold_change_in_typeIII_overexpression, width=3.3)
+```
+## Read in type I overexpression gel quantitation data, reformat, normalize by control
+```{r}
+####### type I-E and I-F overexpression in CRISPR1 ######
+  # Step 1: Read the Excel file and preprocess the data
+  type_I_overexpression_CRISPR1_array <- read_excel("./input/priming_gel_quantitations/Adaptation_gel_quantitation.xlsx", sheet = "2024-06-27_C1_I-E_priming") %>%
+    rename(
+      band_number = `Band No.`,  # Renaming 'Band No.'
+      band_percent = `Band %`,   # Renaming 'Band %'
+      lane = Lane                # Renaming 'Lane'
+    ) %>%
+    mutate(
+      # Create the 'expression' column based on 'lane'
+      expression = case_when(
+        lane %in% 1:3 ~ "control",  # Lane 1-3 are control
+        lane %in% 4:6 ~ "I-E",      # Lane 4-6 are I-E
+        lane %in% 7:9 ~ "I-F",      # Lane 7-9 are I-F
+        TRUE ~ NA_character_       # NA for other lanes
+      ),
+      priming = "I-E",  # Set 'priming' to "I-E" for all rows
+      array = 1         # Add new column 'array' and set it to 1 for all rows
+    ) %>%
+    # Step 2: Calculate the average Band % for each 'band_number', 'expression', and 'priming'
+    group_by(band_number, expression, priming, array) %>%  # Include 'array' in the grouping
+    mutate(
+      avg_band_percent = mean(band_percent, na.rm = TRUE)  # Calculate average across replicates
+    ) %>%
+    # Step 3: Calculate the control average Band % for each 'band_number'
+    group_by(band_number) %>%
+    mutate(
+      control_avg = mean(band_percent[expression == "control"], na.rm = TRUE)  # Control average per band_number
+    ) %>%
+    # Step 4: Normalize Band % for 'I-E' and 'I-F' relative to the control average
+    mutate(
+      normalized_band_percent = case_when(
+        expression == "control" ~ 1,  # Normalize control to 1
+        expression %in% c("I-E", "I-F") ~ band_percent / control_avg,  # Normalize I-E and I-F by control
+        TRUE ~ NA_real_  # Set NA for any other expressions
+      )
+    ) %>%
+    ungroup()  # Remove grouping after the calculation
+  
+  # Step 5: Summarize the data to get one row per band_number, expression, priming, and array
+  type_I_overexpression_CRISPR1_array_summary <- type_I_overexpression_CRISPR1_array %>%
+    group_by(band_number, expression, priming, array) %>%
+    summarize(
+      normalized_band_percent_mean = mean(normalized_band_percent, na.rm = FALSE),
+      normalized_band_percent_sd = sd(normalized_band_percent, na.rm = FALSE),
+      normalized_band_percent_se = sd(normalized_band_percent, na.rm = FALSE) / sqrt(n()),
+      .groups = "drop"
+    )
+  
+  
+####### type I-E and I-F overexpression in CRISPR2  ######
+  # Step 1: Read the Excel file and preprocess the data
+  type_I_overexpression_CRISPR2_array <- read_excel("./input/priming_gel_quantitations/Adaptation_gel_quantitation.xlsx", sheet = "2024-06-27_C2_I-F_priming") %>%
+    rename(
+      band_number = `Band No.`,  # Renaming 'Band No.'
+      band_percent = `Band %`,   # Renaming 'Band %'
+      lane = Lane                # Renaming 'Lane'
+    ) %>%
+    mutate(
+      # Create the 'expression' column based on 'lane'
+      expression = case_when(
+        lane %in% 1:3 ~ "control",  # Lane 1-3 are control
+        lane %in% 4:6 ~ "I-E",      # Lane 4-6 are I-E
+        lane %in% 7:9 ~ "I-F",      # Lane 7-9 are I-F
+        TRUE ~ NA_character_       # NA for other lanes
+      ),
+      priming = "I-F",  # Set 'priming' to "I-E" for all rows
+      array = 2         # Add new column 'array' and set it to 1 for all rows
+    ) %>%
+    # Step 2: Calculate the average Band % for each 'band_number', 'expression', and 'priming'
+    group_by(band_number, expression, priming, array) %>%  # Include 'array' in the grouping
+    mutate(
+      avg_band_percent = mean(band_percent, na.rm = TRUE)  # Calculate average across replicates
+    ) %>%
+    # Step 3: Calculate the control average Band % for each 'band_number'
+    group_by(band_number) %>%
+    mutate(
+      control_avg = mean(band_percent[expression == "control"], na.rm = TRUE)  # Control average per band_number
+    ) %>%
+    # Step 4: Normalize Band % for 'I-E' and 'I-F' relative to the control average
+    mutate(
+      normalized_band_percent = case_when(
+        expression == "control" ~ 1,  # Normalize control to 1
+        expression %in% c("I-E", "I-F") ~ band_percent / control_avg,  # Normalize I-E and I-F by control
+        TRUE ~ NA_real_  # Set NA for any other expressions
+      )
+    ) %>%
+    ungroup()  # Remove grouping after the calculation
+  
+  # Step 5: Summarize the data to get one row per band_number, expression, priming, and array
+  type_I_overexpression_CRISPR2_array_summary <- type_I_overexpression_CRISPR2_array %>%
+    group_by(band_number, expression, priming, array) %>%
+    summarize(
+      normalized_band_percent_mean = mean(normalized_band_percent, na.rm = FALSE),
+      normalized_band_percent_sd = sd(normalized_band_percent, na.rm = FALSE),
+      normalized_band_percent_se = sd(normalized_band_percent, na.rm = FALSE) / sqrt(n()),
+      .groups = "drop"
+    )
+  
+  ####### Combine data T######
+  
+  combined_typeI_overexpression_summary <- bind_rows(
+    type_I_overexpression_CRISPR1_array_summary,
+    type_I_overexpression_CRISPR2_array_summary
+  )
+```
+## Plot normalized band intensities (type I-E/I-F Cas1-2 overexpression change relative to control)
+```{r}
+  fold_change_in_type_I_overexpression<-ggplot()+
+    geom_bar(data=subset(combined_typeI_overexpression_summary, expression %in% c("I-E", "I-F") & band_number <8), 
+             aes(x=band_number, y= normalized_band_percent_mean - 1,
+                 fill=expression),
+             position ="identity", stat="identity", color="black")+
+    # Adding error bars
+    geom_errorbar(data=subset(combined_typeI_overexpression_summary, expression %in% c("I-E", "I-F") & band_number <8),
+                  aes(
+                    x = band_number,
+                    ymin = normalized_band_percent_mean - 1 - normalized_band_percent_se,  # Lower bound of error
+                    ymax = normalized_band_percent_mean - 1 + normalized_band_percent_se   # Upper bound of error
+                  ),
+                  width = 0.2, color = "black") +  # Adjust error bar width and color
+    xlab("Number of spacers") +
+    ylab("Proprotion relative to control") +
+    ggtitle("Normalized band intensities (type I-E/I-F Cas1-2 overexpression relative to control)")+
+    theme_light()+
+    scale_x_continuous(
+      breaks = 1:7,  # Explicitly set the breaks to be from 0 to 6
+      labels = c("0", "1", "2", "3", "4", "5", "6")  # Custom labels for the breaks
+    ) +
+    scale_fill_manual(values=c("#44BB99","#BBCC33"))+
+    guides(fill = guide_legend(keyheight = 0.7, keywidth = 0.7)) +  # Adjust legend size
+    ggh4x::facet_grid2(~expression~priming, scales="free",independent="x", labeller = label_both)+
+    theme(
+      axis.text.x = element_text(color = "black", size = 08),
+      axis.text.y = element_text(color = "black", size = 08),
+      axis.title= element_text(size= 08),
+      legend.text=element_text(size=08),
+      legend.title=element_text(size=08),
+      plot.title = element_text(size=12),
+      strip.background =element_rect(fill=NA),
+      strip.text = element_blank(),
+      aspect.ratio = 0.3,
+      legend.position = "top",
+      panel.grid.minor=element_blank(),
+      panel.grid.major=element_blank())
+  print(fold_change_in_type_I_overexpression)
+  
+  ggsave("./output/priming_gel_quantitations/figures/Type_I_intensities_fold_change_versus_control.pdf",
+     fold_change_in_type_I_overexpression, width=3.3)
+```
+
