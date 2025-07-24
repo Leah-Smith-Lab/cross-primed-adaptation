@@ -32,7 +32,7 @@ read_processing_summary <- read_xlsx("./input/fastqc//read_summary_simplified.xl
          Processing_step = fct_relevel(Processing_step, 
                                        "Raw reads","Size filtered reads","Merged reads","Extracted spacers","Mapped spacers","Uniquely mapped spacers"))
 
-#paired end reads
+# paired end reads
 
 read_filtering_summary_plot <-
   ggplot(
@@ -81,7 +81,7 @@ ggsave("./output/fastqc/figures/read_processing_summary.pdf",
 ## Generate spacer alignment summary (by reference) for plotting
 ```{r}
 # Read in mapping summary data and filter for plotting
-  # Mapping statistics were extracted from individual BAM files then concatenated in an Excel file
+  # Mapping statistics were extracted from individual BAM files using samtools then concatenated in an Excel file
 
 # All spacers
 alignment_summary_all_spacers <- read_xlsx("./input/alignments/mapping_summaries/all_samples_spacer_alignment_summary.xlsx", sheet="all")%>%
@@ -197,10 +197,11 @@ typeIII_samples_alignment_summary_plot <-
 ## Summarize total and unique spacer counts for the different samples
 ```{r}
 # Length distributions (frequency) of extracted spacer (total and unique) were summarized from extracted fastas (in unix) and concatenated to an Excel file where sample metadata was appended
+# Read in data
 all_samples_unique_spacer_data_mapped <- read_xlsx("./input/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary.xlsx", sheet="unique_mapped_spacers")
 all_samples_spacer_data_mapped <- read_xlsx("./input/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary.xlsx", sheet="all_mapped_spacers")
 
-#sum spacer count data (unique)
+# sum spacer count data (unique)
 unique_spacer_counts <- all_samples_unique_spacer_data_mapped %>%
   group_by(Sample)%>%
   dplyr::summarize(
@@ -210,7 +211,7 @@ unique_spacer_counts <- all_samples_unique_spacer_data_mapped %>%
     Priming = dplyr::first(Priming),
     Strain = dplyr::first(Strain))
 
-#sum spacer count data (total)
+# sum spacer count data (total)
 all_spacer_counts <- all_samples_spacer_data_mapped %>%
   group_by(Sample)%>%
   dplyr::summarize(
@@ -271,9 +272,9 @@ ggsave("./output/alignments/figures/mapping_summaries/mapped_summary_counts_plot
 ```
 ## Summarize native CRISPR array spacer length distributions
 ```{r}
-# Read in summary data from CRISPRdetect / CRISPRtarget
+# Read in summary data from CRISPRdetect / CRISPRtarget output
 
-array_summary_data <- read_xlsx("./input//native_CRISPR_arrays/Native_CRISPR_array_spacer_summary.xlsx")
+array_summary_data <- read_xlsx("./input/native_CRISPR_arrays/Native_CRISPR_array_spacer_summary.xlsx")
 
 array_summary_data_reordered <- array_summary_data %>%
   mutate(Array = fct_relevel(Array, 
@@ -323,7 +324,7 @@ ggsave("./output/native_CRISPR_arrays/figures/native_array_lengths_plot.pdf",
 all_samples_unique_spacer_data_mapped <- read_xlsx("./input/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary.xlsx", sheet="unique_mapped_spacers")
 all_samples_spacer_data_mapped <- read_xlsx("./input/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary.xlsx", sheet="all_mapped_spacers")
 
-#Reorder factors for plotting 
+# Reorder factors for plotting 
 unique_mapped_spacers <- all_samples_unique_spacer_data_mapped%>%
   mutate(Priming = fct_relevel(Priming, 
                                "control", "I-E", "I-F"),
@@ -476,10 +477,13 @@ ggsave("./output/spacer_size_distributions/figures/typeIII_unique_spacers_length
 
 ## Read in size distribution of spacer targeting priming (or control) plasmids, append sample info, then reformat 
 ```{r}
+
 # read in sample metadata
 sample_info <- read_xlsx("./input/references/sample_metadata.xlsx")
+
 all_plasmid_target_spacer_lengths <- read.csv("./input/spacer_size_distributions/mapped_spacer_size_distributions/distributions_all_spacers/by_reference/combined_samples_all_priming_plasmid_spacer_distributions.csv", header=TRUE)%>%
   left_join(sample_info, by="Sample")
+
 unique_plasmid_target_spacer_lengths <-read.csv("./input/spacer_size_distributions/mapped_spacer_size_distributions/distributions_unique_spacers/by_reference/combined_samples_unique_priming_plasmid_spacer_distributions.csv", header=TRUE)%>%
   left_join(sample_info, by="Sample")
 
@@ -487,7 +491,7 @@ unique_plasmid_target_spacer_lengths <-read.csv("./input/spacer_size_distributio
 write_xlsx(list(all_plasmid_spacers = all_plasmid_target_spacer_lengths, unique_plasmid_spacers = unique_plasmid_target_spacer_lengths),
 "./output/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary_by_reference.xlsx")
 
-#read in data (if not loaded) and filter for only type III spacers, and factor for plotting
+# Read in data (if not loaded) and filter for only type III spacers, and factor for plotting
 type_III_all_plasmid_spacers <- read_xlsx(
   "./output/spacer_size_distributions/mapped_spacer_size_distributions/mapped_spacer_distribution_summary_by_reference.xlsx",
   sheet = "all_plasmid_spacers"
