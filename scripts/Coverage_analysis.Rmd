@@ -98,7 +98,7 @@ for (i in seq_along(unique_coverage_files)) {
 ## Combine per-base coverage for all samples into one df for facet wrapping
 ```{r}
 
-# combine all samples (total and unique separately) coverage data into one dataframe, append sample metadata
+# Combine all samples (total and unique separately) coverage data into one dataframe, append sample metadata
 
 combined_coverage_data <- rbind(
   stranded_spacers_coverage_01,
@@ -146,12 +146,12 @@ combined_unique_coverage_data <- rbind(
   unique_regions_coverage_20
 )
 
-# read in sample info to append to coverage data (e.g. priming, strain etc)
+# Read in sample info to append to coverage data (e.g. priming, strain etc)
 
 sample_info<-read_xlsx("./input/references/sample_metadata.xlsx")%>%
   dplyr::rename(c("sample"="Sample", "array"="Array", "pool"="Pool", "strain" = "Strain", "priming"="Priming", "adaptation"="Adaptation"))
 
-# join sample info to the combined coverage data
+# Join sample info to the combined coverage data
 
 full_coverage_data <- left_join(combined_coverage_data, sample_info, by="sample")%>%
   mutate(Adaptation = fct_relevel(adaptation, 
@@ -161,7 +161,7 @@ unique_coverage_data <- left_join(combined_unique_coverage_data, sample_info, by
  mutate(Adaptation = fct_relevel(adaptation, 
                                   "primed", "naïve"))
 
-# clear out some large files to reduce memory
+# Clear out some large files to reduce memory
 rm(
   combined_coverage_data,
   combined_unique_coverage_data,
@@ -212,7 +212,7 @@ gc()
 
 ## Generate bins [windows] for the combined per-base coverage df in order to produce facet wrapped plots
 ```{r}
-## define windows for plotting (2500 nt for host and 25 nt for plasmids) 
+## Define windows for plotting (2500 nt for host and 25 nt for plasmids) 
 bin_chromosome <- 2500
 bin_plasmid <- 25
 
@@ -255,7 +255,7 @@ Window2500nt <- full_coverage_data %>%
 
 write.csv(Window2500nt, "./output/alignments/coverage/total/windows/all_samples_2500nt_window.csv")
 
-# clear out some large files to reduce memory
+# Clear out some large files to reduce memory
 rm(full_coverage_data,
    unique_coverage_data)
 gc()
@@ -270,7 +270,7 @@ Window25nt_unique <- read.csv("./output/alignments/coverage/unique/windows/all_s
 ## Plot [windowed] coverage data for priming/control plasmid spacers (type III-A CRISPR3/CRISPR4 arrays)
 ```{r}
 
-# plot of all spacer coverage, sub out df to plot unique
+# Plot of all spacer coverage, sub out df to plot unique
 plot_facets_plasmids_typeIII<-ggplot()+
   geom_area(data=subset(Window25nt,
                           array %in% c("3", "4")&
@@ -413,7 +413,7 @@ ggsave("./output/alignments/figures/coverage/chromosome/typeIII_spacers_chromoso
 
 ## Plot [windowed] coverage data for chromosomal spacers (type I-E/I-F CRISPR1/CRISPR2 arrays)
 ```{r}
-# read in windowed data
+# Read in windowed data
 
 plot_facets_chromosome_typeI<-ggplot()+
   geom_line(data=subset(Window2500nt,
@@ -458,6 +458,5 @@ print(plot_facets_chromosome_typeI)
 ggsave("./output/alignments/figures/coverage/chromosome/typeI_spacers_chromosomal_coverage.pdf",
        plot_facets_chromosome_typeI,
        width=7)
-```
 ```
 
