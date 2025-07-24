@@ -14,15 +14,16 @@ knitr::opts_knit$set(root.dir = "~/Data_analysis/")
 ```
 ## Load packages 
 ```{r}
-pacman::p_load(dplyr,tidyr, ggplot2, ggh4x,readxl,writexl,stringr,forcats,scales, RColorBrewer)
+pacman::p_load(dplyr,tidyr, ggplot2, ggh4x,readxl,writexl,stringr,forcats,scales,RColorBrewer)
 ```
 ## Growth comparison between empty vector and Cas1-2 (type III) expression strains
 ```{r}
 
+# read in growth curve data
 EV_vs_Cas1_2_growth_curve <- read_excel("./input/plasmid_loss/2023_12_16_JS26_growth_tidy.xlsx")%>%
   mutate(Plasmid = fct_relevel(Plasmid, 
                                "pPF781", "pPF3307"))
-
+# plot data
 EV_vs_Cas1_2_growth_curve_plot <-
   ggplot(EV_vs_Cas1_2_growth_curve,
              aes(x=Hours, y=OD600))+
@@ -60,6 +61,8 @@ ggsave("./output/plasmid_loss/figures/growth_curve_Cas1-2_vs_EV_control.pdf",
 
 ## WT versus Cas10 plasmid loss (+/- type III-A Cas1-2 ovexpression)
 ```{r, warning=FALSE}
+
+# read in plasmid loss data (% mCherry +/-)
 WT_vs_cas10_plasmid_loss <- read_excel("./input/plasmid_loss/Plasmid_loss_2024-01-15_tidy.xlsx")%>%
   mutate(
     Strain = fct_relevel(Strain,
@@ -70,7 +73,7 @@ WT_vs_cas10_plasmid_loss <- read_excel("./input/plasmid_loss/Plasmid_loss_2024-0
                                "Control", "I-E", "I-F")
   )
 
-# plotting all data combined by priming #
+# plotting all data combined by priming condition #
 
 WT_vs_cas10_plasmid_loss_plot <-
   ggplot(WT_vs_cas10_plasmid_loss,
@@ -152,6 +155,7 @@ ggsave("./output/plasmid_loss/figures/WT_vs_cas10_plasmid_loss_day3_comparison.p
 ```
 ## Type I-E/I-F plasmid loss during Cas1-2 overexpression (versus empty vector)
 ```{r, warning=FALSE}
+# read in plasmid loss data (% mCherry +/-)
 Cas1_2_variants <- read_excel("./input/plasmid_loss/Plasmid_loss_2024-04-30_tidy.xlsx")%>%
   filter(Plasmid %in% c("pPF781", "pPF3307", "pPF4036", "pPF4037"))%>%
   mutate(
@@ -248,9 +252,9 @@ ggsave("./output/plasmid_loss/figures/Type_I_Cas1-2_variants_vs_type_III_plasmid
 ## Read in type III overexpression gel quantitation data, reformat, normalize by control
 ```{r}
 
-####### type III overexpression in CRISPR1 #####
+# type III overexpression in CRISPR1 #
 
-# Step 1: Read the Excel file and preprocess the data
+# read the Excel file and preprocess the data
 type_III_overexpression_CRISPR1_array <- read_xlsx("./input/priming_gel_quantitations/Adaptation_gel_quantitation.xlsx", sheet = "2024-04-05_CRISPR1_expansion") %>%
   rename(
     band_number = `Band No.`,  # Renaming 'Band No.'
@@ -258,7 +262,7 @@ type_III_overexpression_CRISPR1_array <- read_xlsx("./input/priming_gel_quantita
     lane = Lane                # Renaming 'Lane'
   ) %>%
   mutate(
-    # Create the 'expression' column based on 'lane'
+    # create the 'expression' column based on 'lane'
     expression = case_when(
       lane %in% 1:3 ~ "control",  # Lane 1-3 are control
       lane %in% 4:6 ~ "III-A",      
@@ -267,19 +271,19 @@ type_III_overexpression_CRISPR1_array <- read_xlsx("./input/priming_gel_quantita
     priming = "I-E",  # Set 'priming' to "I-E" for all rows
     array = 1         # Add new column 'array' and set it to 1 for all rows
   ) %>%
-  # Step 2: Calculate the average Band % for each 'band_number', 'expression', and 'priming'
+  # calculate the average Band % for each 'band_number', 'expression', and 'priming'
   group_by(band_number, expression, priming, array) %>%  # Include 'array' in the grouping
   mutate(
     avg_band_percent = mean(band_percent, na.rm = TRUE),  # Calculate average across replicates
     avg_band_percent_sd = sd(band_percent, na.rm = TRUE),    # Calculate the standard deviation of Band %
     avg_band_percent_se = avg_band_percent_sd / sqrt(n())    # Calculate the standard error of Band %
   ) %>%
-  # Step 3: Calculate the control average Band % for each 'band_number'
+  # calculate the control average Band % for each 'band_number'
   group_by(band_number) %>%
   mutate(
     control_avg = mean(band_percent[expression == "control"], na.rm = TRUE)  # Control average per band_number
   ) %>%
-  # Step 4: Normalize Band % for 'I-E' and 'I-F' relative to the control average
+  # normalize Band % for 'I-E' and 'I-F' relative to the control average
   mutate(
     normalized_band_percent = case_when(
       expression == "control" ~ 1,  # Normalize control to 1
@@ -289,7 +293,7 @@ type_III_overexpression_CRISPR1_array <- read_xlsx("./input/priming_gel_quantita
   ) %>%
   ungroup()  # Remove grouping after the calculation
 
-# Step 5: Summarize the data to get one row per band_number, expression, priming, and array
+# summarize the data to get one row per band_number, expression, priming, and array
 type_III_overexpression_CRISPR1_array_summary <- type_III_overexpression_CRISPR1_array %>%
   group_by(band_number, expression, priming, array, avg_band_percent, avg_band_percent_sd, avg_band_percent_se) %>%
   summarize(
@@ -301,7 +305,7 @@ type_III_overexpression_CRISPR1_array_summary <- type_III_overexpression_CRISPR1
 
 ####### type III overexpression in CRISPR2 #####
 
-# Step 1: Read the Excel file and preprocess the data
+# read the Excel file and preprocess the data
 type_III_overexpression_CRISPR2_array <- read_xlsx("./input/priming_gel_quantitations/Adaptation_gel_quantitation.xlsx", sheet = "2024-04-05_CRISPR2_expansion") %>%
   rename(
     band_number = `Band No.`,  # Renaming 'Band No.'
@@ -316,21 +320,21 @@ type_III_overexpression_CRISPR2_array <- read_xlsx("./input/priming_gel_quantita
       TRUE ~ NA_character_       # NA for other lanes
     ),
     priming = "I-F",  # Set 'priming' to "I-E" for all rows
-    array = 2         # Add new column 'array' and set it to 1 for all rows
+    array = 2         # Add new column 'array' and set it to 2 for all rows
   ) %>%
-  # Step 2: Calculate the average Band % for each 'band_number', 'expression', and 'priming'
+  # calculate the average Band % for each 'band_number', 'expression', and 'priming'
   group_by(band_number, expression, priming, array) %>%  # Include 'array' in the grouping
   mutate(
     avg_band_percent = mean(band_percent, na.rm = TRUE),  # Calculate average across replicates
     avg_band_percent_sd = sd(band_percent, na.rm = TRUE),    # Calculate the standard deviation of Band %
     avg_band_percent_se = avg_band_percent_sd / sqrt(n())    # Calculate the standard error of Band %
 ) %>%
-  # Step 3: Calculate the control average Band % for each 'band_number'
+  # calculate the control average Band % for each 'band_number'
   group_by(band_number) %>%
   mutate(
     control_avg = mean(band_percent[expression == "control"], na.rm = TRUE)  # Control average per band_number
   ) %>%
-  # Step 4: Normalize Band % for 'I-E' and 'I-F' relative to the control average
+  # normalize Band % for 'I-E' and 'I-F' relative to the control average
   mutate(
     normalized_band_percent = case_when(
       expression == "control" ~ 1,  # Normalize control to 1
@@ -340,7 +344,7 @@ type_III_overexpression_CRISPR2_array <- read_xlsx("./input/priming_gel_quantita
   ) %>%
   ungroup()  # Remove grouping after the calculation
 
-# Step 5: Summarize the data to get one row per band_number, expression, priming, and array
+# summarize the data to get one row per band_number, expression, priming, and array
 type_III_overexpression_CRISPR2_array_summary <- type_III_overexpression_CRISPR2_array %>%
   group_by(band_number, expression, priming, array, avg_band_percent, avg_band_percent_sd, avg_band_percent_se) %>%
   summarize(
@@ -453,8 +457,8 @@ ggsave("./output/priming_gel_quantitations/figures/Type_III_intensities_fold_cha
 ```
 ## Read in type I overexpression gel quantitation data, reformat, normalize by control
 ```{r}
-####### type I-E and I-F overexpression in CRISPR1 ######
-  # Step 1: Read the Excel file and preprocess the data
+# type I-E and I-F overexpression in CRISPR1 (type I-E priming)
+  # read the Excel file and preprocess the data
   type_I_overexpression_CRISPR1_array <- read_excel("./input/priming_gel_quantitations/Adaptation_gel_quantitation.xlsx", sheet = "2024-06-27_C1_I-E_priming") %>%
     rename(
       band_number = `Band No.`,  # Renaming 'Band No.'
@@ -472,17 +476,17 @@ ggsave("./output/priming_gel_quantitations/figures/Type_III_intensities_fold_cha
       priming = "I-E",  # Set 'priming' to "I-E" for all rows
       array = 1         # Add new column 'array' and set it to 1 for all rows
     ) %>%
-    # Step 2: Calculate the average Band % for each 'band_number', 'expression', and 'priming'
+    # calculate the average Band % for each 'band_number', 'expression', and 'priming'
     group_by(band_number, expression, priming, array) %>%  # Include 'array' in the grouping
     mutate(
       avg_band_percent = mean(band_percent, na.rm = TRUE)  # Calculate average across replicates
     ) %>%
-    # Step 3: Calculate the control average Band % for each 'band_number'
+    # calculate the control average Band % for each 'band_number'
     group_by(band_number) %>%
     mutate(
       control_avg = mean(band_percent[expression == "control"], na.rm = TRUE)  # Control average per band_number
     ) %>%
-    # Step 4: Normalize Band % for 'I-E' and 'I-F' relative to the control average
+    # normalize Band % for 'I-E' and 'I-F' relative to the control average
     mutate(
       normalized_band_percent = case_when(
         expression == "control" ~ 1,  # Normalize control to 1
@@ -492,7 +496,7 @@ ggsave("./output/priming_gel_quantitations/figures/Type_III_intensities_fold_cha
     ) %>%
     ungroup()  # Remove grouping after the calculation
   
-  # Step 5: Summarize the data to get one row per band_number, expression, priming, and array
+  # summarize the data to get one row per band_number, expression, priming, and array
   type_I_overexpression_CRISPR1_array_summary <- type_I_overexpression_CRISPR1_array %>%
     group_by(band_number, expression, priming, array) %>%
     summarize(
@@ -503,8 +507,8 @@ ggsave("./output/priming_gel_quantitations/figures/Type_III_intensities_fold_cha
     )
   
   
-####### type I-E and I-F overexpression in CRISPR2  ######
-  # Step 1: Read the Excel file and preprocess the data
+# type I-E and I-F overexpression in CRISPR2  (type I-F priming)
+  # read the Excel file and preprocess the data
   type_I_overexpression_CRISPR2_array <- read_excel("./input/priming_gel_quantitations/Adaptation_gel_quantitation.xlsx", sheet = "2024-06-27_C2_I-F_priming") %>%
     rename(
       band_number = `Band No.`,  # Renaming 'Band No.'
@@ -512,7 +516,7 @@ ggsave("./output/priming_gel_quantitations/figures/Type_III_intensities_fold_cha
       lane = Lane                # Renaming 'Lane'
     ) %>%
     mutate(
-      # Create the 'expression' column based on 'lane'
+      # create the 'expression' column based on 'lane'
       expression = case_when(
         lane %in% 1:3 ~ "control",  # Lane 1-3 are control
         lane %in% 4:6 ~ "I-E",      # Lane 4-6 are I-E
@@ -520,19 +524,19 @@ ggsave("./output/priming_gel_quantitations/figures/Type_III_intensities_fold_cha
         TRUE ~ NA_character_       # NA for other lanes
       ),
       priming = "I-F",  # Set 'priming' to "I-E" for all rows
-      array = 2         # Add new column 'array' and set it to 1 for all rows
+      array = 2         # Add new column 'array' and set it to 2 for all rows
     ) %>%
-    # Step 2: Calculate the average Band % for each 'band_number', 'expression', and 'priming'
+    # calculate the average Band % for each 'band_number', 'expression', and 'priming'
     group_by(band_number, expression, priming, array) %>%  # Include 'array' in the grouping
     mutate(
       avg_band_percent = mean(band_percent, na.rm = TRUE)  # Calculate average across replicates
     ) %>%
-    # Step 3: Calculate the control average Band % for each 'band_number'
+    # calculate the control average Band % for each 'band_number'
     group_by(band_number) %>%
     mutate(
       control_avg = mean(band_percent[expression == "control"], na.rm = TRUE)  # Control average per band_number
     ) %>%
-    # Step 4: Normalize Band % for 'I-E' and 'I-F' relative to the control average
+    # normalize Band % for 'I-E' and 'I-F' relative to the control average
     mutate(
       normalized_band_percent = case_when(
         expression == "control" ~ 1,  # Normalize control to 1
@@ -542,7 +546,7 @@ ggsave("./output/priming_gel_quantitations/figures/Type_III_intensities_fold_cha
     ) %>%
     ungroup()  # Remove grouping after the calculation
   
-  # Step 5: Summarize the data to get one row per band_number, expression, priming, and array
+  # summarize the data to get one row per band_number, expression, priming, and array
   type_I_overexpression_CRISPR2_array_summary <- type_I_overexpression_CRISPR2_array %>%
     group_by(band_number, expression, priming, array) %>%
     summarize(
@@ -552,7 +556,7 @@ ggsave("./output/priming_gel_quantitations/figures/Type_III_intensities_fold_cha
       .groups = "drop"
     )
   
-  ####### Combine data T######
+  # Combine data 
   
   combined_typeI_overexpression_summary <- bind_rows(
     type_I_overexpression_CRISPR1_array_summary,
