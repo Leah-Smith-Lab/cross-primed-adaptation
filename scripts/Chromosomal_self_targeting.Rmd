@@ -60,7 +60,7 @@ generate_features_tables<- function(full_path, file.prefix) {
   
   features.children<-features.children%>%filter(!parent %in% features.children$id)
   
-  # tidy children data  ## THIS STEP is causing the discrepancy!!!!
+  # tidy children data
   features.children<-features.children%>%mutate(id.child=id,
                                                 id=parent)%>%
     select(-score,-strand)%>%
@@ -90,7 +90,7 @@ generate_features_tables<- function(full_path, file.prefix) {
   features.all <- features.all %>%
     mutate(sample = sample_name)
   
-   #Write the processed data to an Excel file
+   # Write the processed data to an Excel file
   write_xlsx(features.all, path = file.path("./output/alignments/feature_bed_files/unique_spacers/lacA/all_features_stranded/", paste0(file.prefix, "_features_all.xlsx")))
   
   # Add this processed data frame to the global list
@@ -100,7 +100,7 @@ generate_features_tables<- function(full_path, file.prefix) {
   
   combined_lacA_unique_dfs[[file.prefix]] <<- features.all
   
-  # Return the updated global list (optional, if needed in the future)
+  # Return the updated global list
   return(combined_lacA_unique_dfs)
 }
 
@@ -120,7 +120,7 @@ for (file in bed_files) {
  generate_features_tables(file, file_prefix)
 }
 
-# combine all samples into one df and append sample metadata
+# Combine all samples into one df and append sample metadata
 
   sample_info <- read_xlsx("./input/references/sample_metadata.xlsx")%>%
     dplyr::rename(sample=Sample,
@@ -282,7 +282,7 @@ generate_features_tables<- function(full_path, file.prefix) {
   
   features.children<-features.children%>%filter(!parent %in% features.children$id)
   
-  # tidy children data  ## THIS STEP is causing the discrepancy!!!!
+  # tidy children data 
   features.children<-features.children%>%mutate(id.child=id,
                                                 id=parent)%>%
     select(-score,-strand)%>%
@@ -327,7 +327,7 @@ generate_features_tables<- function(full_path, file.prefix) {
   return(combined_lacA_dfs)
 }
 
-# execute function over all wt files
+# Execute function over all wt files
 
 bed_files <- list.files(path="./input/alignments/feature_bed_files/all_spacers/lacA/" ,
                            pattern = "\\.bed$",
@@ -342,7 +342,7 @@ for (file in bed_files) {
   generate_features_tables(file, file_prefix)
 }
 
-# combine all samples into one df and append sample metadata
+# Combine all samples into one df and append sample metadata
 
 sample_info <- read_xlsx("./input/references/sample_metadata.xlsx")%>%
     dplyr::rename(sample=Sample,
@@ -364,9 +364,9 @@ combined_df <- bind_rows(combined_lacA_dfs)%>%
 write_xlsx(path="./output/alignments/feature_bed_files/all_spacers/lacA/all_samples_combined_df.xlsx", combined_df)
 
 
-# reshape data for plotting - group by sample
+# Reshape data for plotting - group by sample
 
-# read in combined data if not loaded
+# Read in combined data if not loaded
 combined_df <- read_xlsx(path="./output/alignments/feature_bed_files/all_spacers/lacA/all_samples_combined_df.xlsx")
 
 all_spacer_orientation_summary <- combined_df %>%
@@ -388,7 +388,7 @@ write_xlsx(all_spacer_orientation_summary, path=
 "./output/alignments/feature_bed_files/all_spacers/lacA/all_spacer_orientation_summary.xlsx")
 ```
 
-## reshape ALL spacer data for plotting - group by feature ######
+## Reshape ALL spacer data for plotting - group by feature ######
 ```{r}
 
 
@@ -409,7 +409,7 @@ write_xlsx(all_spacer_feature_summary_collapsed, "./output/alignments/feature_be
 ## Reshape ALL spacer data (features) as hit or miss data for plotting and output to Excel
 ```{r}
 
-#read in collapsed_feature_summary
+# Read in collapsed_feature_summary
 all_spacer_feature_summary_collapsed <-read_xlsx("./output/alignments/feature_bed_files/all_spacers/lacA/all_spacer_feature_summary_collapsed.xlsx") %>%
   mutate(
     new_locus_tag = str_replace_all(new_locus_tag, "^(PCF303:|NZ_CP025085.1:)", "")
@@ -427,7 +427,7 @@ features_never_captured <- all_spacer_feature_summary_collapsed %>%
   select(new_locus_tag, name, product) %>%
   distinct(new_locus_tag, name, product)
 
-#write to excel
+# Write to excel
 features_never_captured_excel <- features_never_captured %>%
   left_join(all_lacA_features, by=c("new_locus_tag", "name", "product"))%>%
   select(new_locus_tag, name, product, start,end)
@@ -454,7 +454,7 @@ features_not_targeted <- all_spacer_feature_summary_collapsed %>%
   select(new_locus_tag, name, product) %>%
   distinct(new_locus_tag, name, product)
   
-#write to excel
+# Write to excel
 features_not_targeted_excel <- features_not_targeted %>%
   left_join(all_lacA_features, by=c("new_locus_tag", "name", "product"))%>%
   select(new_locus_tag, name, product, start,end)
@@ -495,7 +495,7 @@ strain_cas10_features_not_targeted <- all_spacer_feature_summary_collapsed %>%
 unique_wt_features <- inner_join(strain_WT_features_targeted, strain_cas10_features_not_targeted, 
                                         by = c("new_locus_tag", "name", "product"))
 
-#join to all wt_features
+# Join to all wt_features
 wt_targeted <- left_join(strain_WT_features_targeted, unique_wt_features, 
                          by = c("new_locus_tag", "name", "product"))
 
@@ -570,12 +570,12 @@ print(wt_vs_cas10_summary)
 ## Compare self-targeting data to RNA-seq data
 ```{r}
 
-# read in features that were targeted or not-targeted (depleted) in the WT
+# Read in features that were targeted or not-targeted (depleted) in the WT
 genes_depleted_in_WT <- read_xlsx(path = "./output/alignments/feature_bed_files/all_spacers/lacA/features_not_targeted_in_wt.xlsx")%>%
    select(-c("start", "end"))
  genes_targeted_in_WT <- read_xlsx(path = "./output/alignments/feature_bed_files/all_spacers/lacA/features_targeted_in_wt.xlsx")
  
- # Read in RNA-seq normalized count data (normalized by read depth - .csv available from GEO)
+ # Read in RNA-seq normalized count data (normalized by read depth - .csv file available from GEO)
  RNA_seq_data <- read.csv("./input/RNAseq_analysis/DeSeq2_output/WTvsPigU_size_factor_normalized_counts.csv",
    header = TRUE
  ) %>%
@@ -583,6 +583,7 @@ genes_depleted_in_WT <- read_xlsx(path = "./output/alignments/feature_bed_files/
    mutate(new_locus_tag = gsub("^gene-", "", new_locus_tag)) %>%
    mutate(new_locus_tag = gsub("^id-NZ_CP025085.1:", "", new_locus_tag)) %>%
    select("new_locus_tag", "SerratiaWT1", "SerratiaWT2", "SerratiaWT3")
+
  # Summarize expression data using quartiles
   RNA_seq_data_summary <- RNA_seq_data %>%
    group_by(new_locus_tag) %>%
@@ -617,7 +618,7 @@ genes_depleted_in_WT <- read_xlsx(path = "./output/alignments/feature_bed_files/
     ungroup()%>%
     arrange(desc(mean_expression))
   
-# print summary of feature numbers versus expression level to check they are all equal
+# Print summary of feature numbers versus expression level to check they are all equal
  RNA_seq_data_summary_check <- RNA_seq_data_summary %>%
   group_by(expression_level) %>%
   summarise(count_new_locus_tag = n_distinct(new_locus_tag), .groups = "drop")
