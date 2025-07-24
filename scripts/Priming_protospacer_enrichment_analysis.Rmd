@@ -18,14 +18,14 @@ pacman::p_load(dplyr,tidyr,ggh4x,readxl,writexl,stringr,forcats,scales, RColorBr
 ```
 ## Read-in and format per-base coverage (.csv) files, re-name, assign all to a dataframe
 ```{r}
-#list path to files
+# List path to files
 coverage_files <- list.files(path="./input/alignments/coverage/total////", 
                     full.names = TRUE)
-#change files names
+# Change files names
 modified_file_names <- gsub("^([0-9]+)_(.*)\\.csv$", "\\2_\\1.csv", basename(coverage_files))
 #print(modified_file_names)
 
-# Loop over the files and assign new names dynamically
+# Loop over the files and assign new names
 for (i in seq_along(coverage_files)) {
   file <- coverage_files[i]
   new_name <- modified_file_names[i]
@@ -59,7 +59,7 @@ plasmid_15 <- filter(stranded_spacers_coverage_15, chromosome=="pPF953")%>%
 plasmid_16 <- filter(stranded_spacers_coverage_16, chromosome=="pPF1233")
 plasmid_17<- filter(stranded_spacers_coverage_17, chromosome=="pPF1236")
 
-#cas10 mutant
+# cas10 mutant
 # Filter per-coverage plots to only select chromosome we are interested in (priming or control plasmid)
 plasmid_12 <- filter(stranded_spacers_coverage_12, chromosome=="pPF953")%>%
   # Mutate control plasmid coverage by adding 37 nt starting at base 2999 (this is where the protospacer is inserted)
@@ -120,7 +120,7 @@ joined_dfs <- list(
   join_priming_and_control_I_F_C4_cas10 = join_priming_and_control_I_F_C4_cas10
 )
 
-# Create empty list that processed data will be written to after processing
+# Create empty list that processed data will be written to
 normalized_dfs <- list()
 
 # Loop over files
@@ -130,7 +130,7 @@ for (i in seq_along(joined_dfs)) {
   # Remove the file extension for the new variable name
   df_name <- names(joined_dfs)[i]
   
-  # Directly process and store the result in the list, no intermediate variable
+  # Process and store the result in the list
   normalized_dfs[[paste0(
     gsub("join_priming_and_control", "priming_enriched_coverage_ratio", df_name),
     "_normalized"
@@ -174,7 +174,7 @@ for (df_name in names(normalized_dfs)) {
     summarise(
       sum_plus = sum(coverage_ratio_plus, na.rm = TRUE),  # Sum of coverage_ratio_plus for each bin
       sum_minus = sum(coverage_ratio_minus, na.rm = TRUE),  # Sum of coverage_ratio_minus for each bin
-      sum_combined = sum(coverage_ratio_combined, na.rm = TRUE)  # Sum of coverage_ratio_minus for each bin
+      sum_combined = sum(coverage_ratio_combined, na.rm = TRUE)  # Sum of coverage_ratio_combined for each bin
     ) %>%
     mutate(
       start = (window * bin) + 1,  # Calculate the start position of the bin
@@ -250,7 +250,7 @@ for (df_name in names(normalized_dfs_windows)) {
 
 # Define the starting location
 center_of_protospacer <- 3021
-max_range <- 2989  # Maximum range from the center of plasmid( half plasmid length excluding center_of_protospacer)
+max_range <- 2989  # Maximum range from the center of plasmid (half plasmid length excluding center_of_protospacer)
 sequence_length <- 5979  # Length of the plasmid (0 to 5978)
 # Create and empty list to store the processed data
 normalized_relative_position_dfs <- list()
@@ -297,7 +297,7 @@ for (df_name in names(normalized_relative_position_dfs)) {
   
   # Extract the array and priming information from the dataframe name
   array <- str_extract(df_name, "(?<=C)\\d+")  # Extract the number after 'C' (e.g., 3 from 'C3')
-  priming <- str_extract(df_name, "(?<=_)([^_]+_[^_]+)(?=_C)")  # This captures the part before '_C' (e.g., 'I_F' from 'I_F_C3')
+  priming <- str_extract(df_name, "(?<=_)([^_]+_[^_]+)(?=_C)")  # Extract the part before '_C' (e.g., 'I_F' from 'I_F_C3')
   strain <- str_extract(df_name, "(?<=_)[a-zA-Z0-9]+(?=_normalized)")
   
   # Filter and calculate the sums for upstream and downstream coverage ratios
@@ -607,7 +607,7 @@ for (df_name in names(collapsed_absolute_position_dfs)) {
     mutate(sample = df_name)%>%
     mutate(strain = strain)# Add the processed dataframe name into the sample column
   
-  # Reshape the data into long format for stacking within the same loop
+  # Reshape the data into long format for stacking
   reshaped_counts <- sum_counts %>%
     tidyr::pivot_longer(
       cols = starts_with("combined_range") | starts_with("plus_range") | starts_with("minus_range"), 
