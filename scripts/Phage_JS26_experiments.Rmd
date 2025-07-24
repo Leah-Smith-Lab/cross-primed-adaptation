@@ -49,8 +49,8 @@ escape_titers<-
 geom_jitter(color = "black", shape = 1, alpha = 0.6, width=0.1)+
   facet_wrap(~Strain) +  
 scale_y_log10(
-    limits = c(1e0, 1e12),  # Set log scale limits for y-axis
-    breaks = c(1e0, 1e2, 1e4, 1e6, 1e8, 1e10, 1e12)  # Custom breaks
+    limits = c(1e0, 1e12),
+    breaks = c(1e0, 1e2, 1e4, 1e6, 1e8, 1e10, 1e12)
   ) +
   labs(title = "JS26 titers on type I and type III targeting strains",
        y = "Phage titer (PFU/ml)",
@@ -69,7 +69,7 @@ scale_y_log10(
     legend.position = "tope",
     panel.grid.minor = element_blank(),
     panel.grid.major = element_blank(),
-    panel.spacing.x = unit(0, "lines")   # Horizontal spacing between columns
+    panel.spacing.x = unit(0, "lines")
   )
 print(escape_titers)
 
@@ -97,14 +97,14 @@ JS26_escape_frequency <- JS26_escape_titers %>%
       "None", "Weak", "Strong"
     )))
 
-## plot data
+## Plot data
 EOP<-
   ggplot(JS26_escape_frequency, aes(
   x = factor(Spacer, levels = c("Strong", "Weak", "None")),
   y = escape_frequency
 )) +
-  stat_summary(fun = mean, geom = "col", aes(fill = Spacer), color = "black") +  # Bar for average
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4, linewidth=0.3) +  # SE bars
+  stat_summary(fun = mean, geom = "col", aes(fill = Spacer), color = "black") + 
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4, linewidth=0.3) +
 geom_jitter(color = "black", shape = 1, alpha = 0.6, width=0.1)+
   facet_wrap(~Strain_target, ncol=1, scales="fixed") +
   scale_y_log10()+
@@ -128,7 +128,7 @@ geom_jitter(color = "black", shape = 1, alpha = 0.6, width=0.1)+
     legend.position = "none",
     panel.grid.minor = element_blank(),
     panel.grid.major = element_blank(),
-    panel.spacing.x = unit(0, "lines")   # Horizontal spacing between columns
+    panel.spacing.x = unit(0, "lines")
   )
 print(EOP)
 
@@ -176,8 +176,8 @@ JS26_escape_titers_growth_curves <- read_excel ("./input/phage_experiments/JS26_
 
 JS26_escape_titers_growth_curves_plot <-
   ggplot(subset(JS26_escape_titers_growth_curves, MOI==1), aes(x = Lawn, y = titer_value)) +
-  stat_summary(fun = mean, geom = "col", aes(fill=Plasmid_spacer), color = "black") +  # Bar for average
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4, linewidth=0.3) +  # SE bars
+  stat_summary(fun = mean, geom = "col", aes(fill=Plasmid_spacer), color = "black") + 
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4, linewidth=0.3) +
 geom_jitter(color = "black", shape = 1, alpha = 0.6, width=0.1)+
   facet_wrap(Plasmid_spacer~Strain~Time, ncol=4, scales="free_x") +  
 scale_y_log10(
@@ -202,7 +202,7 @@ scale_y_log10(
     legend.position = "none",
     panel.grid.minor = element_blank(),
     panel.grid.major = element_blank(),
-    panel.spacing.x = unit(0, "lines")   # Horizontal spacing between columns
+    panel.spacing.x = unit(0, "lines") 
   )
 
 print(JS26_escape_titers_growth_curves_plot)
@@ -217,13 +217,13 @@ ggsave("./output/phage_experiments/figures/Type_I_JS26_escape_titers_GC_MOI1.pdf
 I_E_growth_curves <- read_excel ("./input/phage_experiments/JS26_type_I_versus_type_III_growth_curves.xlsx", 
 sheet="2025_06_17_growth_curves")%>%
   pivot_longer(
-    cols = `1`:`145`,       # columns to gather
+    cols = `1`:`145`,       # columns to gather (measurment cycles; every 10 min for 24 h)
     names_to = "Cycle",     # new column for cycles
-    values_to = "OD600"     # new column for values
+    values_to = "OD600"     # new column for values (absorbance at 600nm)
   ) %>%
   mutate(
     Cycle = as.numeric(Cycle),
-    Time = ((Cycle - 1) * 10) / 60,  # Convert to hours
+    Time = ((Cycle - 1) * 10) / 60,  # Convert measurments to hours
     Phage = factor(Phage, levels = c(
       "JS26", "JS26_E3", "JS26_and_JS26_E3", "None", "Blank"
     )),
@@ -238,13 +238,13 @@ sheet="2025_06_17_growth_curves")%>%
 I_F_growth_curves <- read_excel ("./input/phage_experiments/JS26_type_I_versus_type_III_growth_curves.xlsx", 
 sheet="2025_06_18_growth_curves")%>%
   pivot_longer(
-    cols = `1`:`145`,       # columns to gather
+    cols = `1`:`145`,       # columns to gather (measurment cycles; every 10 min for 24 h)
     names_to = "Cycle",     # new column for cycles
-    values_to = "OD600"     # new column for values
+    values_to = "OD600"     # new column for values (absorbance at 600nm)
   ) %>%
   mutate(
     Cycle = as.numeric(Cycle),
-    Time = ((Cycle - 1) * 10) / 60,  # Convert to hours
+    Time = ((Cycle - 1) * 10) / 60,  # Convert measurments to hours
     Phage = factor(Phage, levels = c(
       "JS26", "JS26_E6", "JS26_and_JS26_E6", "None", "Blank"
     )),
@@ -255,7 +255,7 @@ sheet="2025_06_18_growth_curves")%>%
     )),
     Condition = ifelse(MOI == 0, "Control", "Experiment"))
 ```
-## Filter data so controls can be overlayed on plots
+## Filter data so controls can be overlayed on plots during faceting
 ```{r}
 
 plot_data_IF <- bind_rows(
@@ -298,7 +298,7 @@ plot_data_IE <- bind_rows(
   mutate(MOI = factor(MOI, levels = c(0, 0.1, 1)))%>%
   mutate(Strain_target=factor(Strain_target, levels=c("None", "I-E")))
 ```
-#I-F growth curve plots - adjust MOI field to plot MOI== 1 or 0.1
+## I-F growth curve plots - adjust MOI field to plot MOI== 1 or 0.1
 ```{r}
 growth_curve_overlay_IF <-
   ggplot(plot_data_IF, aes(x = Time, y = OD600)) +
@@ -376,7 +376,7 @@ ggsave("./output/phage_experiments/figures/I-F_JS26_escape_curves_overlays_MOI_1
 
 
 ```
-##I-E growth curve - adjust MOI field to plot MOI== 1 or 0.1
+## I-E growth curve plots - adjust MOI field to plot MOI== 1 or 0.1
 ```{r}
 growth_curve_overlay_IE <-
   ggplot(plot_data_IE, aes(x = Time, y = OD600)) +
@@ -450,8 +450,10 @@ print(growth_curve_overlay_IE)
 ggsave("output/phage_experiments/figures/I-E_JS26_escape_curves_overlays_MOI_1.pdf",
        growth_curve_overlay_IE, width=3.3)
 ```
-## Plot JS26 and escape phage MOIs on LacA
+## Plot JS26 and escape phage MOIs on LacA (WT strain)
 ```{r}
+
+# I-F targeting
 escape_growth_curve_overlay_LacA_IF <-
   ggplot(plot_data_IF, aes(x = Time, y = OD600)) +
   
@@ -522,7 +524,7 @@ print(escape_growth_curve_overlay_LacA_IF)
 ggsave("output/phage_experiments/figures/I-F_JS26_escape_curves_overlays_LacA.pdf",
        escape_growth_curve_overlay_LacA_IF, width=3.3)
 
-## I-E
+# I-E targeting
 escape_growth_curve_overlay_LacA_IE <-
   ggplot(plot_data_IE, aes(x = Time, y = OD600)) +
   
