@@ -18,7 +18,7 @@ scripts/ - R Markdown (.Rmd) files used to analyze data / produce figures.
 5. **Run All** chunks in the R Markdown file(s).  
    The outputs (excel files; CSV files; PDFs of plots etc.) will be saved to the specified subdirectories.
 
-   ## Usage
+## Citation
    If you re-use code from this analysis please cite: <br>
    Smith, L. M. and P. C. Fineran (2025). "Type I CRISPR-Cas immunity primes type III spacer acquisition." Cell Host & Microbe 33(9): 1561-1576.e1566. https://doi.org/10.1016/j.chom.2025.07.021
 	
